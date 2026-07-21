@@ -31,6 +31,11 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     private static final int LIST_WIDTH = 156;
     private static final int ROW_HEIGHT = 13;
     private static final int VISIBLE_ROWS = 9;
+    private static final int PREVIEW_X = 180;
+    private static final int PREVIEW_Y = 48;
+    private static final int PREVIEW_WIDTH = 214;
+    private static final int PREVIEW_HEIGHT = 112;
+    private static final int PREVIEW_CONTROLS_Y = 164;
 
     private final Font font;
     private final Controller controller;
@@ -43,6 +48,14 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     private boolean visible;
     private Ship previewShip;
     private HeraldryDraftTexture previewTexture;
+    private int previewStage = 4;
+    private float previewYaw = 180.0F;
+    private float previewPitch = -10.0F;
+    private float previewZoom = 0.82F;
+    private float previewPanX;
+    private float previewPanY;
+    private boolean rotatingPreview;
+    private boolean panningPreview;
     private Component message;
     private long messageUntil;
     private long confirmUntil;
@@ -77,8 +90,10 @@ final class HeraldryLibraryPanel implements AutoCloseable {
 
     void open() {
         visible = true;
+        previewStage = Mth.clamp(controller.previewStage(), 0, HeraldryPatternData.STAGE_COUNT - 1);
         refresh(null);
-        nameInput.setValue(defaultName());
+        HeraldryPatternLibrary.Entry selected = selectedEntry();
+        nameInput.setValue(selected == null ? defaultName() : selected.name());
         nameInput.setFocused(true);
         clearConfirmation();
     }
@@ -112,12 +127,25 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    boolean mouseClicked(double mouseX, double mouseY, int button, boolean shiftDown) {
+        int x = leftPos + X;
+        int y = topPos + Y;
+        if (isInsidePreview(mouseX, mouseY) && (button == 1 || button == 2)) {
+            panningPreview = button == 2 || shiftDown;
+            rotatingPreview = !panningPreview;
+            return true;
+        }
         if (button != 0) {
             return true;
         }
-        int x = leftPos + X;
-        int y = topPos + Y;
+        if (isInside(mouseX, mouseY, x + PREVIEW_X, y + PREVIEW_CONTROLS_Y, 18, 17)) {
+            changePreviewStage(previewStage - 1);
+            return true;
+        }
+        if (isInside(mouseX, mouseY, x + PREVIEW_X + PREVIEW_WIDTH - 18, y + PREVIEW_CONTROLS_Y, 18, 17)) {
+            changePreviewStage(previewStage + 1);
+            return true;
+        }
         if (nameInput != null && isInside(mouseX, mouseY, x + 11, y + 22, 152, 17)) {
             nameInput.mouseClicked(mouseX, mouseY, button);
             return true;
@@ -147,6 +175,28 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         return true;
     }
 
+    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (rotatingPreview && button == 1) {
+            previewYaw = (previewYaw + (float) dragX * 1.4F) % 360.0F;
+            previewPitch = Mth.clamp(previewPitch + (float) dragY * 1.2F, -80.0F, 80.0F);
+            return true;
+        }
+        if (panningPreview && (button == 1 || button == 2)) {
+            previewPanX += (float) dragX;
+            previewPanY += (float) dragY;
+            return true;
+        }
+        return true;
+    }
+
+    boolean mouseReleased(int button) {
+        if (button == 0 || button == 1 || button == 2) {
+            rotatingPreview = false;
+            panningPreview = false;
+        }
+        return true;
+    }
+
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             closePanel();
@@ -166,6 +216,10 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     }
 
     boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+        if (isInsidePreview(mouseX, mouseY)) {
+            previewZoom = Mth.clamp(previewZoom * (float) Math.pow(1.12D, amount), 0.35F, 2.2F);
+            return true;
+        }
         int listX = leftPos + X + LIST_X;
         int listY = topPos + Y + LIST_Y;
         if (isInside(mouseX, mouseY, listX, listY, LIST_WIDTH, VISIBLE_ROWS * ROW_HEIGHT)) {
@@ -206,7 +260,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
 
         drawEntries(graphics, mouseX, mouseY, x, y);
-        drawPreview(graphics, x, y);
+        drawPreview(graphics, mouseX, mouseY, x, y);
         drawControl(graphics, mouseX, mouseY, x + 12, y + 184, 70, 17, confirmLabel(Action.LOAD, "smallshipsheraldry.library.load"));
         drawControl(graphics, mouseX, mouseY, x + 86, y + 184, 70, 17, Component.translatable("smallshipsheraldry.library.rename"));
         drawControl(graphics, mouseX, mouseY, x + 160, y + 184, 70, 17, confirmLabel(Action.DELETE, "smallshipsheraldry.library.delete"));
@@ -237,25 +291,25 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
     }
 
-    private void drawPreview(GuiGraphics graphics, int x, int y) {
-        int previewX = x + 180;
-        int previewY = y + 48;
-        int previewWidth = 214;
-        int previewHeight = 112;
-        HeraldryGuiTheme.drawPreviewInset(graphics, previewX - 2, previewY - 2, previewWidth + 4, previewHeight + 4);
+    private void drawPreview(GuiGraphics graphics, int mouseX, int mouseY, int x, int y) {
+        int previewX = x + PREVIEW_X;
+        int previewY = y + PREVIEW_Y;
+        HeraldryGuiTheme.drawPreviewInset(graphics, previewX - 2, previewY - 2, PREVIEW_WIDTH + 4, PREVIEW_HEIGHT + 4);
         HeraldryPatternLibrary.Entry selected = selectedEntry();
         if (selected == null || previewShip == null || previewTexture == null) {
             return;
         }
         previewTexture.uploadIfDirty();
         RenderSystem.enableDepthTest();
-        PreviewShipRenderer.render(graphics, previewX, previewY, previewX + previewWidth, previewY + previewHeight,
-                previewShip, 180.0F, -10.0F, 0.82F, 0.0F, 0.0F, Set.of(), previewTexture.textureLocation());
+        PreviewShipRenderer.render(graphics, previewX, previewY, previewX + PREVIEW_WIDTH, previewY + PREVIEW_HEIGHT,
+                previewShip, previewYaw, previewPitch, previewZoom, previewPanX, previewPanY, Set.of(), previewTexture.textureLocation());
         graphics.flush();
         RenderSystem.disableDepthTest();
         Component details = Component.translatable("smallshipsheraldry.library.details",
-                selected.data().shipType().getDisplayName(), controller.previewStage() + 1);
-        drawCentered(graphics, details, previewX + previewWidth / 2, y + 166);
+                selected.data().shipType().getDisplayName(), previewStage + 1);
+        drawControl(graphics, mouseX, mouseY, previewX, y + PREVIEW_CONTROLS_Y, 18, 17, Component.literal("<"));
+        drawCentered(graphics, details, previewX + PREVIEW_WIDTH / 2, y + PREVIEW_CONTROLS_Y + 4);
+        drawControl(graphics, mouseX, mouseY, previewX + PREVIEW_WIDTH - 18, y + PREVIEW_CONTROLS_Y, 18, 17, Component.literal(">"));
     }
 
     private void refresh(String selectName) {
@@ -281,6 +335,10 @@ final class HeraldryLibraryPanel implements AutoCloseable {
                 scroll = selection - VISIBLE_ROWS + 1;
             }
         }
+        if (nameInput != null) {
+            HeraldryPatternLibrary.Entry selected = selectedEntry();
+            nameInput.setValue(selected == null ? defaultName() : selected.name());
+        }
         rebuildPreview();
     }
 
@@ -302,7 +360,21 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
         HeraldryPatternData data = entry.data();
         previewTexture = new HeraldryDraftTexture("library", data.toDenseMeshPixels());
-        previewShip = PreviewShipFactory.create(data.shipType(), data, controller.previewStage());
+        previewShip = PreviewShipFactory.create(data.shipType(), data, previewStage);
+    }
+
+    private void changePreviewStage(int stage) {
+        int clamped = Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1);
+        if (clamped == previewStage) {
+            return;
+        }
+        previewStage = clamped;
+        PreviewShipFactory.setSailState(previewShip, previewStage);
+    }
+
+    private boolean isInsidePreview(double mouseX, double mouseY) {
+        return isInside(mouseX, mouseY,
+                leftPos + X + PREVIEW_X, topPos + Y + PREVIEW_Y, PREVIEW_WIDTH, PREVIEW_HEIGHT);
     }
 
     private void closePreview() {

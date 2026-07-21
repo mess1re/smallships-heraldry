@@ -277,7 +277,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (libraryPanelVisible()) {
-            return libraryPanel.mouseClicked(mouseX, mouseY, button);
+            return libraryPanel.mouseClicked(mouseX, mouseY, button, hasShiftDown());
         }
         if (helpVisible && !isInside(mouseX, mouseY, leftPos + imageWidth - HELP_SIZE - HELP_MARGIN, topPos + HELP_Y, HELP_SIZE, HELP_SIZE)) {
             helpVisible = false;
@@ -347,7 +347,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (libraryPanelVisible()) {
-            return true;
+            return libraryPanel.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
         if (colorPicker.mouseDragged(mouseX, mouseY)) {
             return true;
@@ -367,7 +367,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 strokeEndScreenX = mouseX;
                 strokeEndScreenY = mouseY;
                 Optional<PaintableSailMesh.Hit> hit = pickAtPreview(mouseX, mouseY, hiddenElements);
-                if (hit.isPresent() && isHitInSelection(hit.get()) && hit.get().faceIndex() == strokeStartHit.faceIndex()) {
+                if (hit.isPresent() && isHitInSelection(hit.get())) {
                     lastStrokeHit = hit.get();
                 }
                 return true;
@@ -381,7 +381,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (libraryPanelVisible()) {
-            return true;
+            return libraryPanel.mouseReleased(button);
         }
         boolean completedPaintStroke = paintingPreview && button == 0;
         boolean completedLine = completedPaintStroke && strokeMode == StrokeMode.LINE && strokeStartHit != null && !temporaryPicker;
@@ -1219,20 +1219,43 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void applyLineStroke() {
-        if (strokeStartHit == null || lastStrokeHit == null || !pushUndo()) {
+        if (strokeStartHit == null || !pushUndo()) {
             return;
         }
         int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
-        boolean changed = PaintableSailMesh.paintLinePixels(previewShip, strokeStartHit, lastStrokeHit, previewStage,
-                session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
+        double deltaX = strokeEndScreenX - strokeStartScreenX;
+        double deltaY = strokeEndScreenY - strokeStartScreenY;
+        int steps = Math.max(1, Mth.ceil(Math.max(Math.abs(deltaX), Math.abs(deltaY))));
+        Map<Integer, PaintableSailMesh.Hit> touchedFaces = new HashMap<>();
+        PaintableSailMesh.Hit previousHit = null;
+        boolean changed = false;
+        for (int step = 0; step <= steps; step++) {
+            double progress = step / (double) steps;
+            double x = strokeStartScreenX + deltaX * progress;
+            double y = strokeStartScreenY + deltaY * progress;
+            Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(x, y, hiddenElements);
+            if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
+                previousHit = null;
+                continue;
+            }
+            PaintableSailMesh.Hit hit = sampled.get();
+            boolean sampleChanged;
+            if (previousHit != null && previousHit.faceIndex() == hit.faceIndex()) {
+                sampleChanged = PaintableSailMesh.paintLinePixels(previewShip, previousHit, hit, previewStage,
+                        session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
+            } else {
+                sampleChanged = PaintableSailMesh.paintBrushPixels(previewShip, hit, previewStage,
+                        session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
+            }
+            changed |= sampleChanged;
+            touchedFaces.put(hit.faceIndex(), hit);
+            previousHit = hit;
+        }
         if (!changed) {
             discardLatestUndo();
             return;
         }
-        syncHitFace(strokeStartHit);
-        if (lastStrokeHit.faceIndex() != strokeStartHit.faceIndex()) {
-            syncHitFace(lastStrokeHit);
-        }
+        touchedFaces.values().forEach(this::syncHitFace);
         session.markLocallyModified();
         commitPaintBuffer();
     }
