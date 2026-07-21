@@ -6,6 +6,7 @@ import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.client.HeraldryClientSettings;
+import me.mss1r.smallshipsheraldry.client.HeraldryPatternLibrary;
 import me.mss1r.smallshipsheraldry.client.render.HeraldryDraftTexture;
 import me.mss1r.smallshipsheraldry.client.render.PaintableSailMesh;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipFactory;
@@ -38,11 +39,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMenu> {
     private static final ResourceLocation TOOL_ICONS = new ResourceLocation(SmallShipsHeraldry.MOD_ID, "textures/gui/heraldry_tools.png");
     private static final int MAX_HISTORY_ENTRIES = 64;
     private static final int MAX_HISTORY_BYTES = 32 * 1024 * 1024;
+    private static final DateTimeFormatter LIBRARY_NAME_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm");
 
     private static final int ELEMENT_X = 10;
     private static final int ELEMENT_Y = 36;
@@ -100,6 +104,16 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private static final int SYMMETRY_Y = 108;
     private static final int FILL_MODE_Y = 68;
     private static final int SCOPE_ACTION_Y = 164;
+    private static final int LIBRARY_BUTTON_Y = 188;
+    private static final int LIBRARY_X = 32;
+    private static final int LIBRARY_Y = 24;
+    private static final int LIBRARY_WIDTH = 406;
+    private static final int LIBRARY_HEIGHT = 212;
+    private static final int LIBRARY_LIST_X = 12;
+    private static final int LIBRARY_LIST_Y = 48;
+    private static final int LIBRARY_LIST_WIDTH = 156;
+    private static final int LIBRARY_ROW_HEIGHT = 13;
+    private static final int LIBRARY_VISIBLE_ROWS = 9;
 
     private static final int[] BASE_COLORS = {
             0xFFFFFFFF, 0xFFD87F33, 0xFFB24CD8, 0xFF6699D8,
@@ -123,6 +137,18 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private Set<String> selectedElementIds = new LinkedHashSet<>();
     private PaperEditBox hexInput;
     private PaperButton printButton;
+    private PaperButton libraryButton;
+    private PaperEditBox libraryNameInput;
+    private List<HeraldryPatternLibrary.Entry> libraryEntries = List.of();
+    private int librarySelection = -1;
+    private int libraryScroll;
+    private boolean libraryVisible;
+    private Ship libraryPreviewShip;
+    private HeraldryDraftTexture libraryPreviewTexture;
+    private Component libraryMessage;
+    private long libraryMessageUntil;
+    private long libraryConfirmUntil;
+    private LibraryAction libraryConfirmAction;
     private int previewStage = 4;
     private float previewYaw = 180.0F;
     private float previewPitch = -10.0F;
@@ -226,7 +252,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         hexInput.setTextColorUneditable(HeraldryGuiTheme.MUTED_INK);
         hexInput.setFilter(HeraldryTableScreen::isHexDraft);
         hexInput.setResponder(this::handleHexInput);
-        hexInput.visible = editorMode == EditorMode.PAINT;
+        hexInput.visible = editorMode == EditorMode.PAINT && !libraryVisible;
         syncHexInput();
         addRenderableWidget(hexInput);
 
@@ -237,7 +263,15 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         addRenderableWidget(new PaperButton(x0 + PREVIEW_X + PREVIEW_WIDTH - 32, controlY, 20, 18, Component.literal(">"), button -> changePreviewType(previewType.next())));
         addRenderableWidget(new PaperButton(previewCenter - 62, controlY, 24, 18, Component.literal("S<"), button -> changePreviewStage(previewStage - 1)));
         addRenderableWidget(new PaperButton(previewCenter + 38, controlY, 24, 18, Component.literal("S>"), button -> changePreviewStage(previewStage + 1)));
+        libraryButton = addRenderableWidget(new PaperButton(x0 + ELEMENT_X, y0 + LIBRARY_BUTTON_Y, ELEMENT_WIDTH, 17, Component.translatable("smallshipsheraldry.button.library"), button -> openLibrary()));
         printButton = addRenderableWidget(new PaperButton(x0 + RIGHT_X + 4, y0 + 230, 82, 18, Component.translatable("smallshipsheraldry.button.export"), button -> exportPattern()));
+
+        libraryNameInput = new PaperEditBox(font, x0 + LIBRARY_X + 13, y0 + LIBRARY_Y + 24, 148, 14, Component.translatable("smallshipsheraldry.library.name"));
+        libraryNameInput.setMaxLength(HeraldryPatternLibrary.MAX_NAME_LENGTH);
+        libraryNameInput.setBordered(false);
+        libraryNameInput.setTextColor(HeraldryGuiTheme.INK);
+        libraryNameInput.setTextColorUneditable(HeraldryGuiTheme.MUTED_INK);
+        libraryNameInput.setResponder(value -> clearLibraryConfirmation());
     }
 
     @Override
@@ -266,6 +300,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (printButton != null) {
             printButton.active = !menu.getPaperStack().isEmpty() && menu.getResultStack().isEmpty();
         }
+        if (libraryButton != null) {
+            libraryButton.visible = editorMode == EditorMode.PAINT && !libraryVisible && !helpVisible;
+        }
+        if (libraryVisible && libraryNameInput != null) {
+            libraryNameInput.tick();
+        }
         if (draftSavePending && System.currentTimeMillis() >= draftSaveAt) {
             sendDraftUpdate();
         }
@@ -276,13 +316,17 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         if (hexInput != null) {
-            hexInput.visible = editorMode == EditorMode.PAINT;
+            hexInput.visible = editorMode == EditorMode.PAINT && !libraryVisible && !helpVisible;
         }
         if (draftTexture != null) {
             draftTexture.uploadIfDirty();
         }
         renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (libraryVisible) {
+            drawLibraryPopupAboveEverything(guiGraphics, mouseX, mouseY, partialTick);
+            return;
+        }
         if (helpVisible) {
             drawHelpPopupAboveEverything(guiGraphics);
             return;
@@ -317,11 +361,15 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             draftTexture.close();
             draftTexture = null;
         }
+        closeLibraryPreview();
         super.removed();
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (libraryVisible) {
+            return handleLibraryClick(mouseX, mouseY, button);
+        }
         if (helpVisible && !isInside(mouseX, mouseY, leftPos + imageWidth - HELP_SIZE - HELP_MARGIN, topPos + HELP_Y, HELP_SIZE, HELP_SIZE)) {
             helpVisible = false;
             return true;
@@ -389,6 +437,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (libraryVisible) {
+            return true;
+        }
         if (pickingColor) {
             setColorFromField(mouseX, mouseY);
             return true;
@@ -429,6 +480,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (libraryVisible) {
+            return true;
+        }
         boolean completedPaintStroke = paintingPreview && button == 0;
         boolean completedLine = completedPaintStroke && strokeMode == StrokeMode.LINE && strokeStartHit != null && !temporaryPicker;
         if (completedLine) {
@@ -454,6 +508,20 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (libraryVisible) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                closeLibrary();
+                return true;
+            }
+            if (libraryNameInput != null && libraryNameInput.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                saveLibraryEntry();
+                return true;
+            }
+            return true;
+        }
         if (hexInput != null && hexInput.isFocused()) {
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
@@ -537,6 +605,15 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+        if (libraryVisible) {
+            int listX = leftPos + LIBRARY_X + LIBRARY_LIST_X;
+            int listY = topPos + LIBRARY_Y + LIBRARY_LIST_Y;
+            if (isInside(mouseX, mouseY, listX, listY, LIBRARY_LIST_WIDTH, LIBRARY_VISIBLE_ROWS * LIBRARY_ROW_HEIGHT)) {
+                int maxScroll = Math.max(0, libraryEntries.size() - LIBRARY_VISIBLE_ROWS);
+                libraryScroll = Mth.clamp(libraryScroll - (int) Math.signum(amount), 0, maxScroll);
+            }
+            return true;
+        }
         if (isInsidePreview(mouseX, mouseY)) {
             zoomPreviewAt(mouseX, mouseY, amount);
             return true;
@@ -554,6 +631,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, amount);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (libraryVisible) {
+            return libraryNameInput != null && libraryNameInput.charTyped(codePoint, modifiers);
+        }
+        return super.charTyped(codePoint, modifiers);
     }
 
     private void drawLeftPanel(GuiGraphics guiGraphics, int x0, int y0) {
@@ -847,6 +932,371 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
     }
 
+    private void openLibrary() {
+        helpVisible = false;
+        libraryVisible = true;
+        if (libraryButton != null) {
+            libraryButton.visible = false;
+        }
+        if (hexInput != null) {
+            hexInput.visible = false;
+            hexInput.setFocused(false);
+        }
+        refreshLibrary(null);
+        if (libraryNameInput != null) {
+            libraryNameInput.setValue(defaultLibraryName());
+            libraryNameInput.setFocused(true);
+        }
+        clearLibraryConfirmation();
+    }
+
+    private void closeLibrary() {
+        libraryVisible = false;
+        if (libraryNameInput != null) {
+            libraryNameInput.setFocused(false);
+        }
+        closeLibraryPreview();
+        clearLibraryConfirmation();
+    }
+
+    private void refreshLibrary(String selectName) {
+        libraryEntries = HeraldryPatternLibrary.list();
+        librarySelection = -1;
+        if (selectName != null) {
+            for (int index = 0; index < libraryEntries.size(); index++) {
+                if (libraryEntries.get(index).name().equalsIgnoreCase(selectName)) {
+                    librarySelection = index;
+                    break;
+                }
+            }
+        }
+        if (librarySelection < 0 && !libraryEntries.isEmpty()) {
+            librarySelection = 0;
+        }
+        int maxScroll = Math.max(0, libraryEntries.size() - LIBRARY_VISIBLE_ROWS);
+        libraryScroll = Mth.clamp(libraryScroll, 0, maxScroll);
+        if (librarySelection >= 0) {
+            if (librarySelection < libraryScroll) {
+                libraryScroll = librarySelection;
+            } else if (librarySelection >= libraryScroll + LIBRARY_VISIBLE_ROWS) {
+                libraryScroll = librarySelection - LIBRARY_VISIBLE_ROWS + 1;
+            }
+        }
+        rebuildLibraryPreview();
+    }
+
+    private void selectLibraryEntry(int index) {
+        if (index < 0 || index >= libraryEntries.size()) {
+            return;
+        }
+        librarySelection = index;
+        HeraldryPatternLibrary.Entry entry = libraryEntries.get(index);
+        if (libraryNameInput != null) {
+            libraryNameInput.setValue(entry.name());
+        }
+        clearLibraryConfirmation();
+        rebuildLibraryPreview();
+    }
+
+    private void rebuildLibraryPreview() {
+        closeLibraryPreview();
+        HeraldryPatternLibrary.Entry entry = selectedLibraryEntry();
+        if (entry == null) {
+            return;
+        }
+        HeraldryPatternData data = entry.data();
+        libraryPreviewTexture = new HeraldryDraftTexture("library", data.toDenseMeshPixels());
+        libraryPreviewShip = PreviewShipFactory.create(data.shipType(), data, previewStage);
+    }
+
+    private void closeLibraryPreview() {
+        libraryPreviewShip = null;
+        if (libraryPreviewTexture != null) {
+            libraryPreviewTexture.close();
+            libraryPreviewTexture = null;
+        }
+    }
+
+    private HeraldryPatternLibrary.Entry selectedLibraryEntry() {
+        return librarySelection >= 0 && librarySelection < libraryEntries.size()
+                ? libraryEntries.get(librarySelection)
+                : null;
+    }
+
+    private void drawLibraryPopupAboveEverything(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        guiGraphics.flush();
+        RenderSystem.disableDepthTest();
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(0.0F, 0.0F, 500.0F);
+        try {
+            drawLibraryPopup(guiGraphics, mouseX, mouseY, partialTick);
+        } finally {
+            guiGraphics.pose().popPose();
+            guiGraphics.flush();
+            RenderSystem.enableDepthTest();
+        }
+    }
+
+    private void drawLibraryPopup(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        int x = leftPos + LIBRARY_X;
+        int y = topPos + LIBRARY_Y;
+        HeraldryGuiTheme.drawWindow(guiGraphics, x, y, LIBRARY_WIDTH, LIBRARY_HEIGHT);
+        guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.library.title"), x + 12, y + 10, HeraldryGuiTheme.INK, false);
+
+        guiGraphics.fill(x + 11, y + 22, x + 163, y + 39, libraryNameInput != null && libraryNameInput.isFocused() ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
+        guiGraphics.fill(x + 12, y + 23, x + 162, y + 38, HeraldryGuiTheme.PAPER_ALT);
+        if (libraryNameInput != null) {
+            libraryNameInput.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        drawControl(guiGraphics, x + 166, y + 22, 54, 17, false, Component.translatable("smallshipsheraldry.library.save"));
+
+        Component message = System.currentTimeMillis() < libraryMessageUntil
+                ? libraryMessage
+                : Component.translatable("smallshipsheraldry.library.local_hint");
+        if (message != null) {
+            List<FormattedCharSequence> lines = font.split(message, 170);
+            for (int index = 0; index < Math.min(2, lines.size()); index++) {
+                guiGraphics.drawString(font, lines.get(index), x + 226, y + 22 + index * 9, HeraldryGuiTheme.MUTED_INK, false);
+            }
+        }
+
+        int listX = x + LIBRARY_LIST_X;
+        int listY = y + LIBRARY_LIST_Y;
+        HeraldryGuiTheme.drawPanel(guiGraphics, listX - 2, listY - 2, LIBRARY_LIST_WIDTH + 4, LIBRARY_VISIBLE_ROWS * LIBRARY_ROW_HEIGHT + 4);
+        if (libraryEntries.isEmpty()) {
+            drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.library.empty"), listX + LIBRARY_LIST_WIDTH / 2, listY + 52, HeraldryGuiTheme.MUTED_INK);
+        } else {
+            for (int row = 0; row < LIBRARY_VISIBLE_ROWS; row++) {
+                int index = libraryScroll + row;
+                int rowY = listY + row * LIBRARY_ROW_HEIGHT;
+                if (index >= libraryEntries.size()) {
+                    guiGraphics.fill(listX, rowY, listX + LIBRARY_LIST_WIDTH, rowY + 11, HeraldryGuiTheme.PAPER_ALT);
+                    continue;
+                }
+                HeraldryPatternLibrary.Entry entry = libraryEntries.get(index);
+                boolean selected = index == librarySelection;
+                boolean hovered = isInside(mouseX, mouseY, listX, rowY, LIBRARY_LIST_WIDTH, 11);
+                guiGraphics.fill(listX, rowY, listX + LIBRARY_LIST_WIDTH, rowY + 11, selected ? HeraldryGuiTheme.GOLD : hovered ? HeraldryGuiTheme.INSET : HeraldryGuiTheme.PAPER_ALT);
+                String name = font.plainSubstrByWidth(entry.name(), LIBRARY_LIST_WIDTH - 8);
+                guiGraphics.drawString(font, name, listX + 4, rowY + 2, HeraldryGuiTheme.INK, false);
+            }
+        }
+
+        int previewX = x + 180;
+        int previewY = y + 48;
+        int previewWidth = 214;
+        int previewHeight = 112;
+        HeraldryGuiTheme.drawPreviewInset(guiGraphics, previewX - 2, previewY - 2, previewWidth + 4, previewHeight + 4);
+        HeraldryPatternLibrary.Entry selected = selectedLibraryEntry();
+        if (selected != null && libraryPreviewShip != null && libraryPreviewTexture != null) {
+            libraryPreviewTexture.uploadIfDirty();
+            RenderSystem.enableDepthTest();
+            PreviewShipRenderer.render(
+                    guiGraphics,
+                    previewX,
+                    previewY,
+                    previewX + previewWidth,
+                    previewY + previewHeight,
+                    libraryPreviewShip,
+                    180.0F,
+                    -10.0F,
+                    0.82F,
+                    0.0F,
+                    0.0F,
+                    Set.of(),
+                    libraryPreviewTexture.textureLocation()
+            );
+            guiGraphics.flush();
+            RenderSystem.disableDepthTest();
+            Component details = Component.translatable(
+                    "smallshipsheraldry.library.details",
+                    selected.data().shipType().getDisplayName(),
+                    previewStage + 1
+            );
+            drawCenteredNoShadow(guiGraphics, details, previewX + previewWidth / 2, y + 166, HeraldryGuiTheme.MUTED_INK);
+        }
+
+        drawControl(guiGraphics, x + 12, y + 184, 70, 17, false, confirmLabel(LibraryAction.LOAD, "smallshipsheraldry.library.load"));
+        drawControl(guiGraphics, x + 86, y + 184, 70, 17, false, Component.translatable("smallshipsheraldry.library.rename"));
+        drawControl(guiGraphics, x + 160, y + 184, 70, 17, false, confirmLabel(LibraryAction.DELETE, "smallshipsheraldry.library.delete"));
+        drawControl(guiGraphics, x + 324, y + 184, 70, 17, false, Component.translatable("smallshipsheraldry.library.close"));
+    }
+
+    private Component confirmLabel(LibraryAction action, String normalKey) {
+        return libraryConfirmAction == action && System.currentTimeMillis() < libraryConfirmUntil
+                ? Component.translatable("smallshipsheraldry.library.confirm")
+                : Component.translatable(normalKey);
+    }
+
+    private boolean handleLibraryClick(double mouseX, double mouseY, int button) {
+        if (button != 0) {
+            return true;
+        }
+        int x = leftPos + LIBRARY_X;
+        int y = topPos + LIBRARY_Y;
+        if (libraryNameInput != null && isInside(mouseX, mouseY, x + 11, y + 22, 152, 17)) {
+            libraryNameInput.mouseClicked(mouseX, mouseY, button);
+            return true;
+        }
+        if (libraryNameInput != null) {
+            libraryNameInput.setFocused(false);
+        }
+        if (isInside(mouseX, mouseY, x + 166, y + 22, 54, 17)) {
+            saveLibraryEntry();
+            return true;
+        }
+        int listX = x + LIBRARY_LIST_X;
+        int listY = y + LIBRARY_LIST_Y;
+        if (isInside(mouseX, mouseY, listX, listY, LIBRARY_LIST_WIDTH, LIBRARY_VISIBLE_ROWS * LIBRARY_ROW_HEIGHT)) {
+            int row = (int) ((mouseY - listY) / LIBRARY_ROW_HEIGHT);
+            selectLibraryEntry(libraryScroll + row);
+            return true;
+        }
+        if (isInside(mouseX, mouseY, x + 12, y + 184, 70, 17)) {
+            loadLibraryEntry();
+        } else if (isInside(mouseX, mouseY, x + 86, y + 184, 70, 17)) {
+            renameLibraryEntry();
+        } else if (isInside(mouseX, mouseY, x + 160, y + 184, 70, 17)) {
+            deleteLibraryEntry();
+        } else if (isInside(mouseX, mouseY, x + 324, y + 184, 70, 17)) {
+            closeLibrary();
+        }
+        return true;
+    }
+
+    private void saveLibraryEntry() {
+        HeraldryPatternData data = currentData();
+        if (data == null || libraryNameInput == null) {
+            return;
+        }
+        String name = HeraldryPatternLibrary.sanitizeName(libraryNameInput.getValue());
+        if (name.isEmpty()) {
+            showLibraryMessage("smallshipsheraldry.library.invalid_name");
+            return;
+        }
+        boolean overwrite = libraryConfirmAction == LibraryAction.OVERWRITE && System.currentTimeMillis() < libraryConfirmUntil;
+        HeraldryPatternLibrary.Result result = HeraldryPatternLibrary.save(name, data, overwrite);
+        if (result == HeraldryPatternLibrary.Result.ALREADY_EXISTS) {
+            requestLibraryConfirmation(LibraryAction.OVERWRITE, "smallshipsheraldry.library.overwrite");
+            return;
+        }
+        clearLibraryConfirmation();
+        if (result == HeraldryPatternLibrary.Result.SUCCESS) {
+            refreshLibrary(name);
+            showLibraryMessage("smallshipsheraldry.library.saved");
+        } else {
+            showLibraryResult(result);
+        }
+    }
+
+    private void loadLibraryEntry() {
+        HeraldryPatternLibrary.Entry entry = selectedLibraryEntry();
+        if (entry == null) {
+            return;
+        }
+        if (currentData() == null) {
+            return;
+        }
+        HeraldryPatternData imported = entry.data();
+        HeraldryPatternData replaced = drafts.get(imported.shipType());
+        boolean hasWork = replaced.paintedPixelCount() > 0 || replaced.baseColorArgb() != 0xFFFFFFFF;
+        if (hasWork && (libraryConfirmAction != LibraryAction.LOAD || System.currentTimeMillis() >= libraryConfirmUntil)) {
+            requestLibraryConfirmation(LibraryAction.LOAD, "smallshipsheraldry.library.replace_draft");
+            return;
+        }
+
+        rememberImportedOver(replaced);
+        previewType = imported.shipType();
+        patternData = imported;
+        drafts = drafts.withDraft(imported).withActiveShipType(previewType);
+        paintPixels = imported.toDenseMeshPixels();
+        if (draftTexture != null) {
+            draftTexture.replacePixels(paintPixels);
+            draftTexture.uploadIfDirty();
+        }
+        switchElementContext();
+        markDirty();
+        rebuildPreviewShip();
+        closeLibrary();
+        showStatus(Component.translatable("smallshipsheraldry.library.loaded"));
+    }
+
+    private void rememberImportedOver(HeraldryPatternData replaced) {
+        EditHistory history = histories.computeIfAbsent(replaced.shipType(), ignored -> new EditHistory());
+        history.undo.push(replaced);
+        history.undoBytes += replaced.estimatedMemoryBytes();
+        history.redo.clear();
+        history.redoBytes = 0;
+        while (history.undo.size() > MAX_HISTORY_ENTRIES || history.undoBytes > MAX_HISTORY_BYTES) {
+            history.undoBytes -= history.undo.removeLast().estimatedMemoryBytes();
+        }
+    }
+
+    private void renameLibraryEntry() {
+        HeraldryPatternLibrary.Entry entry = selectedLibraryEntry();
+        if (entry == null || libraryNameInput == null) {
+            return;
+        }
+        String name = HeraldryPatternLibrary.sanitizeName(libraryNameInput.getValue());
+        HeraldryPatternLibrary.Result result = HeraldryPatternLibrary.rename(entry, name);
+        if (result == HeraldryPatternLibrary.Result.SUCCESS) {
+            refreshLibrary(name);
+            showLibraryMessage("smallshipsheraldry.library.renamed");
+        } else {
+            showLibraryResult(result);
+        }
+    }
+
+    private void deleteLibraryEntry() {
+        HeraldryPatternLibrary.Entry entry = selectedLibraryEntry();
+        if (entry == null) {
+            return;
+        }
+        if (libraryConfirmAction != LibraryAction.DELETE || System.currentTimeMillis() >= libraryConfirmUntil) {
+            requestLibraryConfirmation(LibraryAction.DELETE, "smallshipsheraldry.library.delete_warning");
+            return;
+        }
+        HeraldryPatternLibrary.Result result = HeraldryPatternLibrary.delete(entry);
+        clearLibraryConfirmation();
+        if (result == HeraldryPatternLibrary.Result.SUCCESS) {
+            refreshLibrary(null);
+            showLibraryMessage("smallshipsheraldry.library.deleted");
+        } else {
+            showLibraryResult(result);
+        }
+    }
+
+    private void requestLibraryConfirmation(LibraryAction action, String messageKey) {
+        libraryConfirmAction = action;
+        libraryConfirmUntil = System.currentTimeMillis() + 3_000L;
+        showLibraryMessage(messageKey);
+    }
+
+    private void clearLibraryConfirmation() {
+        libraryConfirmAction = null;
+        libraryConfirmUntil = 0L;
+    }
+
+    private void showLibraryResult(HeraldryPatternLibrary.Result result) {
+        String key = switch (result) {
+            case INVALID_NAME -> "smallshipsheraldry.library.invalid_name";
+            case ALREADY_EXISTS -> "smallshipsheraldry.library.exists";
+            case TOO_LARGE -> "smallshipsheraldry.library.too_large";
+            case NOT_FOUND -> "smallshipsheraldry.library.not_found";
+            default -> "smallshipsheraldry.library.io_error";
+        };
+        showLibraryMessage(key);
+    }
+
+    private void showLibraryMessage(String translationKey) {
+        libraryMessage = Component.translatable(translationKey);
+        libraryMessageUntil = System.currentTimeMillis() + 4_000L;
+    }
+
+    private String defaultLibraryName() {
+        return previewType.serializedName() + "_" + LIBRARY_NAME_TIME.format(LocalDateTime.now());
+    }
+
     private void drawHelpPopupAboveEverything(GuiGraphics guiGraphics) {
         guiGraphics.flush();
         RenderSystem.disableDepthTest();
@@ -893,7 +1343,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         drawSlot(guiGraphics, x0 + HeraldryTableMenu.PAPER_SLOT_X, y0 + HeraldryTableMenu.PAPER_SLOT_Y, HeraldryGuiTheme.PAPER_ALT);
         drawSlot(guiGraphics, x0 + HeraldryTableMenu.RESULT_SLOT_X, y0 + HeraldryTableMenu.RESULT_SLOT_Y, HeraldryGuiTheme.GOLD);
         int arrowCenter = x0 + (HeraldryTableMenu.PAPER_SLOT_X + 16 + HeraldryTableMenu.RESULT_SLOT_X) / 2;
-        drawCenteredNoShadow(guiGraphics, Component.literal("\u2192"), arrowCenter, y0 + HeraldryTableMenu.RESULT_SLOT_Y + 4, HeraldryGuiTheme.MUTED_INK);
+        drawCenteredNoShadow(guiGraphics, Component.literal("→"), arrowCenter, y0 + HeraldryTableMenu.RESULT_SLOT_Y + 4, HeraldryGuiTheme.MUTED_INK);
     }
 
     private void drawSlot(GuiGraphics guiGraphics, int x, int y, int fillColor) {
@@ -2097,6 +2547,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
             return AREA;
         }
+    }
+
+    private enum LibraryAction {
+        OVERWRITE,
+        LOAD,
+        DELETE
     }
 
     private static final class EditHistory {
