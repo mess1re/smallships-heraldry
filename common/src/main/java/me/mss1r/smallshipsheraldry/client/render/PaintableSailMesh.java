@@ -248,6 +248,30 @@ public final class PaintableSailMesh {
         return SailMeshPicker.pick(faces, mouseX, mouseY, hiddenElements);
     }
 
+    public static float projectedPixelScale(Ship ship, Hit hit) {
+        if (ship == null || hit == null) {
+            return 1.0F;
+        }
+        for (Face face : cachedEditorFaces(ship).orElse(List.of())) {
+            if (face.faceIndex() != hit.faceIndex()) {
+                continue;
+            }
+            Vertex[] vertices = face.vertices();
+            float horizontal = (screenDistance(vertices[0], vertices[1]) + screenDistance(vertices[3], vertices[2]))
+                    / (2.0F * Math.max(1, face.slot().width()));
+            float vertical = (screenDistance(vertices[0], vertices[3]) + screenDistance(vertices[1], vertices[2]))
+                    / (2.0F * Math.max(1, face.slot().height()));
+            return Math.max(0.5F, (horizontal + vertical) * 0.5F);
+        }
+        return 1.0F;
+    }
+
+    private static float screenDistance(Vertex first, Vertex second) {
+        float x = second.x() - first.x();
+        float y = second.y() - first.y();
+        return Mth.sqrt(x * x + y * y);
+    }
+
     public static void captureEditorPickFaces(Ship ship, SailModel sailModel, PoseStack poseStack) {
         if (ship == null || sailModel == null) {
             return;

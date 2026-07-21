@@ -147,6 +147,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             return true;
         }
         if (nameInput != null && isInside(mouseX, mouseY, x + 11, y + 22, 152, 17)) {
+            nameInput.setFocused(true);
             nameInput.mouseClicked(mouseX, mouseY, button);
             return true;
         }

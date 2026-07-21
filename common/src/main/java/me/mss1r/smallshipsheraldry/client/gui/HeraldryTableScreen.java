@@ -1,6 +1,7 @@
 package me.mss1r.smallshipsheraldry.client.gui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.math.Axis;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
@@ -668,7 +669,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             guiGraphics.drawString(font, font.plainSubstrByWidth(selected.getString(), PREVIEW_WIDTH - 16), x0 + PREVIEW_X + 8, y0 + PREVIEW_Y + 8, HeraldryGuiTheme.GOLD_LIGHT, false);
         }
         if (paintingPreview && strokeMode == StrokeMode.LINE && strokeStartHit != null) {
-            drawScreenLine(guiGraphics, (int) strokeStartScreenX, (int) strokeStartScreenY, (int) strokeEndScreenX, (int) strokeEndScreenY, colorPicker.color() | 0xFF000000);
+            drawLinePreview(guiGraphics);
         }
     }
 
@@ -1225,31 +1226,43 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
         double deltaX = strokeEndScreenX - strokeStartScreenX;
         double deltaY = strokeEndScreenY - strokeStartScreenY;
-        int steps = Math.max(1, Mth.ceil(Math.max(Math.abs(deltaX), Math.abs(deltaY))));
+        double lengthSquared = deltaX * deltaX + deltaY * deltaY;
+        double length = Math.sqrt(lengthSquared);
+        double thickness = lineScreenThickness();
+        double halfThickness = thickness * 0.5D;
+        int previewLeft = leftPos + PREVIEW_X;
+        int previewTop = topPos + PREVIEW_Y;
+        int previewRight = previewLeft + PREVIEW_WIDTH - 1;
+        int previewBottom = previewTop + PREVIEW_HEIGHT - 1;
+        int minX = Math.max(previewLeft, Mth.floor(Math.min(strokeStartScreenX, strokeEndScreenX) - halfThickness));
+        int maxX = Math.min(previewRight, Mth.ceil(Math.max(strokeStartScreenX, strokeEndScreenX) + halfThickness));
+        int minY = Math.max(previewTop, Mth.floor(Math.min(strokeStartScreenY, strokeEndScreenY) - halfThickness));
+        int maxY = Math.min(previewBottom, Mth.ceil(Math.max(strokeStartScreenY, strokeEndScreenY) + halfThickness));
         Map<Integer, PaintableSailMesh.Hit> touchedFaces = new HashMap<>();
-        PaintableSailMesh.Hit previousHit = null;
+        Set<Long> touchedPixels = new LinkedHashSet<>();
         boolean changed = false;
-        for (int step = 0; step <= steps; step++) {
-            double progress = step / (double) steps;
-            double x = strokeStartScreenX + deltaX * progress;
-            double y = strokeStartScreenY + deltaY * progress;
-            Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(x, y, hiddenElements);
-            if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
-                previousHit = null;
-                continue;
+        for (int y = minY; y <= maxY; y++) {
+            for (int x = minX; x <= maxX; x++) {
+                double sampleX = x + 0.5D;
+                double sampleY = y + 0.5D;
+                if (!insideLineRectangle(sampleX, sampleY, deltaX, deltaY, lengthSquared, length, halfThickness)) {
+                    continue;
+                }
+                Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(sampleX, sampleY, hiddenElements);
+                if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
+                    continue;
+                }
+                PaintableSailMesh.Hit hit = sampled.get();
+                long pixelKey = ((long) hit.faceIndex() << 32)
+                        ^ ((long) hit.pixelY() << 16)
+                        ^ (hit.pixelX() & 0xFFFFL);
+                if (!touchedPixels.add(pixelKey)) {
+                    continue;
+                }
+                changed |= PaintableSailMesh.paintBrushPixels(previewShip, hit, previewStage,
+                        session.pixels(), color, 1, mirrorVertical, mirrorHorizontal);
+                touchedFaces.put(hit.faceIndex(), hit);
             }
-            PaintableSailMesh.Hit hit = sampled.get();
-            boolean sampleChanged;
-            if (previousHit != null && previousHit.faceIndex() == hit.faceIndex()) {
-                sampleChanged = PaintableSailMesh.paintLinePixels(previewShip, previousHit, hit, previewStage,
-                        session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
-            } else {
-                sampleChanged = PaintableSailMesh.paintBrushPixels(previewShip, hit, previewStage,
-                        session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
-            }
-            changed |= sampleChanged;
-            touchedFaces.put(hit.faceIndex(), hit);
-            previousHit = hit;
         }
         if (!changed) {
             discardLatestUndo();
@@ -1258,6 +1271,37 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         touchedFaces.values().forEach(this::syncHitFace);
         session.markLocallyModified();
         commitPaintBuffer();
+    }
+
+    private boolean insideLineRectangle(
+            double x,
+            double y,
+            double deltaX,
+            double deltaY,
+            double lengthSquared,
+            double length,
+            double halfThickness
+    ) {
+        if (lengthSquared < 0.0001D) {
+            return Math.abs(x - strokeStartScreenX) <= halfThickness
+                    && Math.abs(y - strokeStartScreenY) <= halfThickness;
+        }
+        double relativeX = x - strokeStartScreenX;
+        double relativeY = y - strokeStartScreenY;
+        double position = (relativeX * deltaX + relativeY * deltaY) / lengthSquared;
+        if (position < 0.0D || position > 1.0D) {
+            return false;
+        }
+        double perpendicularDistance = Math.abs(relativeX * deltaY - relativeY * deltaX) / length;
+        return perpendicularDistance <= halfThickness;
+    }
+
+    private float lineScreenThickness() {
+        float startScale = PaintableSailMesh.projectedPixelScale(previewShip, strokeStartHit);
+        float endScale = lastStrokeHit == null
+                ? startScale
+                : PaintableSailMesh.projectedPixelScale(previewShip, lastStrokeHit);
+        return Math.max(1.0F, brushSize * (startScale + endScale) * 0.5F);
     }
 
     private Optional<Integer> gridFaceIndexUnderMouse() {
@@ -1648,29 +1692,20 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         guiGraphics.blit(TOOL_ICONS, x + (width - 16) / 2, y + (height - 16) / 2, iconU, 0, 16, 16, TOOL_TEXTURE_WIDTH, 16);
     }
 
-    private void drawScreenLine(GuiGraphics guiGraphics, int x0, int y0, int x1, int y1, int color) {
-        int dx = Math.abs(x1 - x0);
-        int stepX = x0 < x1 ? 1 : -1;
-        int dy = -Math.abs(y1 - y0);
-        int stepY = y0 < y1 ? 1 : -1;
-        int error = dx + dy;
-        while (true) {
-            if (isInsidePreview(x0, y0)) {
-                guiGraphics.fill(x0, y0, x0 + 1, y0 + 1, color);
-            }
-            if (x0 == x1 && y0 == y1) {
-                break;
-            }
-            int twiceError = error * 2;
-            if (twiceError >= dy) {
-                error += dy;
-                x0 += stepX;
-            }
-            if (twiceError <= dx) {
-                error += dx;
-                y0 += stepY;
-            }
-        }
+    private void drawLinePreview(GuiGraphics guiGraphics) {
+        double deltaX = strokeEndScreenX - strokeStartScreenX;
+        double deltaY = strokeEndScreenY - strokeStartScreenY;
+        float length = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        float thickness = lineScreenThickness();
+        guiGraphics.enableScissor(leftPos + PREVIEW_X, topPos + PREVIEW_Y,
+                leftPos + PREVIEW_X + PREVIEW_WIDTH, topPos + PREVIEW_Y + PREVIEW_HEIGHT);
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(strokeStartScreenX, strokeStartScreenY, 0.0D);
+        guiGraphics.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(deltaY, deltaX)));
+        int half = Math.max(1, Mth.ceil(thickness * 0.5F));
+        guiGraphics.fill(0, -half, Math.max(1, Mth.ceil(length)), half, colorPicker.color() | 0xA0000000);
+        guiGraphics.pose().popPose();
+        guiGraphics.disableScissor();
     }
 
     private void drawCenteredNoShadow(GuiGraphics guiGraphics, Component text, int centerX, int y, int color) {

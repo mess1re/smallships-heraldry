@@ -54,7 +54,7 @@
   "smallshipsheraldry.library.close": "Закрыть",
   "smallshipsheraldry.library.confirm": "Точно?",
   "smallshipsheraldry.library.empty": "Нет сохранённых узоров",
-  "smallshipsheraldry.library.local_hint": "Хранится на этом компьютере",
+  "smallshipsheraldry.library.local_hint": "ПКМ: вращать · Колесо: масштаб",
   "smallshipsheraldry.library.details": "%s · положение паруса %s",
   "smallshipsheraldry.library.saved": "Узор сохранён",
   "smallshipsheraldry.library.loaded": "Узор загружен в черновик",
