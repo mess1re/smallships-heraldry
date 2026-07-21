@@ -30,6 +30,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import org.lwjgl.glfw.GLFW;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -521,6 +522,18 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return libraryPanel.charTyped(codePoint, modifiers);
         }
         return super.charTyped(codePoint, modifiers);
+    }
+
+    @Override
+    public void onFilesDrop(List<Path> paths) {
+        if (libraryPanel == null) {
+            super.onFilesDrop(paths);
+            return;
+        }
+        if (!libraryPanel.isVisible()) {
+            libraryPanel.open();
+        }
+        libraryPanel.importFiles(paths);
     }
 
     private void drawLeftPanel(GuiGraphics guiGraphics, int x0, int y0) {

@@ -8,6 +8,7 @@ import me.mss1r.smallshipsheraldry.client.render.PreviewShipFactory;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipRenderer;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
+import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -15,6 +16,8 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -170,6 +173,8 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             rename();
         } else if (isInside(mouseX, mouseY, x + 160, y + 184, 70, 17)) {
             delete();
+        } else if (isInside(mouseX, mouseY, x + 234, y + 184, 86, 17)) {
+            openFolder();
         } else if (isInside(mouseX, mouseY, x + 324, y + 184, 70, 17)) {
             closePanel();
         }
@@ -265,6 +270,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         drawControl(graphics, mouseX, mouseY, x + 12, y + 184, 70, 17, confirmLabel(Action.LOAD, "smallshipsheraldry.library.load"));
         drawControl(graphics, mouseX, mouseY, x + 86, y + 184, 70, 17, Component.translatable("smallshipsheraldry.library.rename"));
         drawControl(graphics, mouseX, mouseY, x + 160, y + 184, 70, 17, confirmLabel(Action.DELETE, "smallshipsheraldry.library.delete"));
+        drawControl(graphics, mouseX, mouseY, x + 234, y + 184, 86, 17, Component.translatable("smallshipsheraldry.library.open_folder"));
         drawControl(graphics, mouseX, mouseY, x + 324, y + 184, 70, 17, Component.translatable("smallshipsheraldry.library.close"));
     }
 
@@ -461,6 +467,27 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
     }
 
+    void importFiles(List<Path> paths) {
+        HeraldryPatternLibrary.ImportSummary summary = HeraldryPatternLibrary.importFiles(paths);
+        refresh(summary.lastImportedName());
+        if (summary.imported() == 0 && summary.duplicates() == 0) {
+            showMessage(Component.translatable("smallshipsheraldry.library.import_none"));
+            return;
+        }
+        showMessage(Component.translatable("smallshipsheraldry.library.import_result",
+                summary.imported(), summary.duplicates(), summary.invalid()));
+    }
+
+    private void openFolder() {
+        Path directory = HeraldryPatternLibrary.directory();
+        try {
+            Files.createDirectories(directory);
+            Util.getPlatform().openFile(directory.toFile());
+        } catch (RuntimeException | java.io.IOException exception) {
+            showMessage("smallshipsheraldry.library.io_error");
+        }
+    }
+
     private HeraldryPatternLibrary.Entry selectedEntry() {
         return selection >= 0 && selection < entries.size() ? entries.get(selection) : null;
     }
@@ -494,7 +521,11 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     }
 
     private void showMessage(String translationKey) {
-        message = Component.translatable(translationKey);
+        showMessage(Component.translatable(translationKey));
+    }
+
+    private void showMessage(Component text) {
+        message = text;
         messageUntil = System.currentTimeMillis() + 4_000L;
     }
 

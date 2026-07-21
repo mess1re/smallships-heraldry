@@ -13,6 +13,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public final class HeraldryPatternLibrary {
     private static final long MAX_FILE_BYTES = 512L * 1024L;
     private static final long MAX_NBT_BYTES = 2L * 1024L * 1024L;
     private static final int MAX_ENTRIES = 256;
+    private static final int MAX_DROP_FILES = 64;
     private static final String FORMAT_TAG = "LibraryFormat";
     private static final String PATTERN_TAG = "Pattern";
     private static final Set<String> WINDOWS_RESERVED_NAMES = Set.of(
@@ -153,6 +155,34 @@ public final class HeraldryPatternLibrary {
         }
     }
 
+    public static ImportSummary importFiles(List<Path> inputs) {
+        if (inputs == null || inputs.isEmpty()) {
+            return new ImportSummary(0, 0, 0, null);
+        }
+        int imported = 0;
+        int duplicates = 0;
+        int invalid = Math.max(0, inputs.size() - MAX_DROP_FILES);
+        String lastImportedName = null;
+        for (Path input : inputs.stream().limit(MAX_DROP_FILES).toList()) {
+            Optional<HeraldryPatternData> data = readPattern(input, false);
+            String name = externalName(input);
+            if (data.isEmpty() || name.isEmpty()) {
+                invalid++;
+                continue;
+            }
+            Result result = save(name, data.get(), false);
+            if (result == Result.SUCCESS) {
+                imported++;
+                lastImportedName = name;
+            } else if (result == Result.ALREADY_EXISTS) {
+                duplicates++;
+            } else {
+                invalid++;
+            }
+        }
+        return new ImportSummary(imported, duplicates, invalid, lastImportedName);
+    }
+
     public static String sanitizeName(String input) {
         if (input == null) {
             return "";
@@ -185,6 +215,31 @@ public final class HeraldryPatternLibrary {
         if (!isInsideLibrary(path) || !isLibraryFile(path)) {
             return Optional.empty();
         }
+        Optional<HeraldryPatternData> data = readPattern(path, true);
+        if (data.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            String fileName = path.getFileName().toString();
+            String name = fileName.substring(0, fileName.length() - EXTENSION.length());
+            return Optional.of(new Entry(name, path, data.get(), Files.getLastModifiedTime(path).toMillis()));
+        } catch (IOException exception) {
+            SmallShipsHeraldry.LOGGER.warn("Could not read local heraldry pattern metadata {}", path, exception);
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<HeraldryPatternData> readPattern(Path input, boolean libraryFile) {
+        if (input == null) {
+            return Optional.empty();
+        }
+        Path path = input.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(path)
+                || !hasPatternExtension(path)
+                || (libraryFile && !isInsideLibrary(path))) {
+            return Optional.empty();
+        }
         try {
             if (Files.size(path) > MAX_FILE_BYTES) {
                 return Optional.empty();
@@ -196,24 +251,34 @@ public final class HeraldryPatternLibrary {
             if (root.getInt(FORMAT_TAG) != FORMAT_VERSION || !root.contains(PATTERN_TAG, Tag.TAG_COMPOUND)) {
                 return Optional.empty();
             }
-            Optional<HeraldryPatternData> data = HeraldryPatternData.tryFromRootTag(root.getCompound(PATTERN_TAG));
-            if (data.isEmpty()) {
-                return Optional.empty();
-            }
-            String fileName = path.getFileName().toString();
-            String name = fileName.substring(0, fileName.length() - EXTENSION.length());
-            return Optional.of(new Entry(name, path, data.get(), Files.getLastModifiedTime(path).toMillis()));
+            return HeraldryPatternData.tryFromRootTag(root.getCompound(PATTERN_TAG));
         } catch (IOException | RuntimeException exception) {
-            SmallShipsHeraldry.LOGGER.warn("Ignoring invalid local heraldry pattern {}", path, exception);
+            SmallShipsHeraldry.LOGGER.warn("Ignoring invalid heraldry pattern {}", path, exception);
             return Optional.empty();
         }
+    }
+
+    private static String externalName(Path input) {
+        if (input == null || input.getFileName() == null) {
+            return "";
+        }
+        String fileName = input.getFileName().toString();
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(EXTENSION)) {
+            return "";
+        }
+        return sanitizeName(fileName.substring(0, fileName.length() - EXTENSION.length()));
     }
 
     private static boolean isLibraryFile(Path path) {
         if (!Files.isRegularFile(path) || Files.isSymbolicLink(path)) {
             return false;
         }
-        return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(EXTENSION);
+        return hasPatternExtension(path);
+    }
+
+    private static boolean hasPatternExtension(Path path) {
+        return path.getFileName() != null
+                && path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(EXTENSION);
     }
 
     private static Path resolve(String safeName) {
@@ -246,6 +311,9 @@ public final class HeraldryPatternLibrary {
     }
 
     public record Entry(String name, Path path, HeraldryPatternData data, long modifiedMillis) {
+    }
+
+    public record ImportSummary(int imported, int duplicates, int invalid, String lastImportedName) {
     }
 
     public enum Result {
