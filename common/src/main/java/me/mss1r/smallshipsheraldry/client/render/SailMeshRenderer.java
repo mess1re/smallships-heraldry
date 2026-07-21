@@ -1,0 +1,229 @@
+package me.mss1r.smallshipsheraldry.client.render;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import org.joml.Vector3f;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+final class SailMeshRenderer {
+    private static final float PAINT_NORMAL_PUSH = 0.003F;
+    private static final float EDGE_KEY_SCALE = 10000.0F;
+
+    private SailMeshRenderer() {
+    }
+
+    static void renderPainted(List<PaintableSailMesh.Face> faces, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight) {
+        if (faces.isEmpty()) {
+            return;
+        }
+        Map<PointKey, Vector3f> vertexPushes = buildVertexPushes(faces);
+        for (PaintableSailMesh.Face face : faces) {
+            PoseStack.Pose pose = poseStack.last();
+            PaintableSailMesh.AtlasSlot slot = face.slot();
+            for (PaintableSailMesh.Vertex vertex : face.vertices()) {
+                float u = (slot.x() + vertex.localU() * slot.width()) / HeraldryPatternData.MESH_ATLAS_WIDTH;
+                float v = (slot.y() + vertex.localV() * slot.height()) / HeraldryPatternData.MESH_ATLAS_HEIGHT;
+                emitPaintVertex(face, pose, vertexConsumer, paintPosition(face, vertex, vertexPushes), u, v, packedLight);
+            }
+        }
+    }
+
+    static void renderOriginal(PaintableSailMesh.Face face, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight) {
+        PoseStack.Pose pose = poseStack.last();
+        for (PaintableSailMesh.Vertex vertex : face.vertices()) {
+            vertexConsumer.vertex(pose.pose(), vertex.x(), vertex.y(), vertex.z())
+                    .color(255, 255, 255, 255)
+                    .uv(vertex.originalU(), vertex.originalV())
+                    .overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(packedLight)
+                    .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
+                    .endVertex();
+        }
+    }
+
+    static void renderHighlight(PaintableSailMesh.Face face, PoseStack poseStack, VertexConsumer vertexConsumer) {
+        PaintableSailMesh.Vertex[] vertices = face.vertices();
+        emitHighlightLine(face, poseStack, vertexConsumer, vertices[0], vertices[1]);
+        emitHighlightLine(face, poseStack, vertexConsumer, vertices[1], vertices[2]);
+        emitHighlightLine(face, poseStack, vertexConsumer, vertices[2], vertices[3]);
+        emitHighlightLine(face, poseStack, vertexConsumer, vertices[3], vertices[0]);
+    }
+
+    static void renderGrid(PaintableSailMesh.Face face, PoseStack poseStack, VertexConsumer vertexConsumer) {
+        GridCorners corners = gridCorners(face);
+        PaintableSailMesh.AtlasSlot slot = face.slot();
+        for (int x = 1; x < slot.width(); x++) {
+            float u = x / (float) slot.width();
+            emitGridLine(face, poseStack, vertexConsumer, interpolate(corners, u, 0.0F), interpolate(corners, u, 1.0F));
+        }
+        for (int y = 1; y < slot.height(); y++) {
+            float v = y / (float) slot.height();
+            emitGridLine(face, poseStack, vertexConsumer, interpolate(corners, 0.0F, v), interpolate(corners, 1.0F, v));
+        }
+    }
+
+    private static Vector3f paintPosition(
+            PaintableSailMesh.Face face,
+            PaintableSailMesh.Vertex vertex,
+            Map<PointKey, Vector3f> vertexPushes
+    ) {
+        Vector3f push = vertexPushes.get(pointKey(vertex));
+        if (push == null || push.lengthSquared() < 0.00001F) {
+            push = face.normal();
+        }
+        return new Vector3f(
+                vertex.x() + push.x() * PAINT_NORMAL_PUSH,
+                vertex.y() + push.y() * PAINT_NORMAL_PUSH,
+                vertex.z() + push.z() * PAINT_NORMAL_PUSH
+        );
+    }
+
+    private static void emitPaintVertex(
+            PaintableSailMesh.Face face,
+            PoseStack.Pose pose,
+            VertexConsumer vertexConsumer,
+            Vector3f position,
+            float u,
+            float v,
+            int packedLight
+    ) {
+        vertexConsumer.vertex(pose.pose(), position.x(), position.y(), position.z())
+                .color(255, 255, 255, 255)
+                .uv(u, v)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(packedLight)
+                .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
+                .endVertex();
+    }
+
+    private static Map<PointKey, Vector3f> buildVertexPushes(List<PaintableSailMesh.Face> faces) {
+        Map<PointKey, Vector3f> pushes = new HashMap<>();
+        for (PaintableSailMesh.Face face : faces) {
+            for (PaintableSailMesh.Vertex vertex : face.vertices()) {
+                pushes.computeIfAbsent(pointKey(vertex), ignored -> new Vector3f()).add(face.normal());
+            }
+        }
+        for (Vector3f push : pushes.values()) {
+            if (push.lengthSquared() > 0.00001F) {
+                push.normalize();
+            } else {
+                push.set(0.0F, 1.0F, 0.0F);
+            }
+        }
+        return pushes;
+    }
+
+    private static PointKey pointKey(PaintableSailMesh.Vertex vertex) {
+        return new PointKey(
+                Math.round(vertex.x() * EDGE_KEY_SCALE),
+                Math.round(vertex.y() * EDGE_KEY_SCALE),
+                Math.round(vertex.z() * EDGE_KEY_SCALE)
+        );
+    }
+
+    private static void emitHighlightLine(
+            PaintableSailMesh.Face face,
+            PoseStack poseStack,
+            VertexConsumer vertexConsumer,
+            PaintableSailMesh.Vertex from,
+            PaintableSailMesh.Vertex to
+    ) {
+        float push = 0.028F;
+        Vector3f normal = face.normal();
+        Vector3f lineDirection = new Vector3f(to.x() - from.x(), to.y() - from.y(), to.z() - from.z());
+        normalizeLineDirection(lineDirection);
+        emitLineVertex(poseStack, vertexConsumer, from.x() + normal.x() * push, from.y() + normal.y() * push, from.z() + normal.z() * push, lineDirection, 95, 220, 255);
+        emitLineVertex(poseStack, vertexConsumer, to.x() + normal.x() * push, to.y() + normal.y() * push, to.z() + normal.z() * push, lineDirection, 95, 220, 255);
+    }
+
+    private static GridCorners gridCorners(PaintableSailMesh.Face face) {
+        return new GridCorners(
+                closestVertex(face, 0.0F, 0.0F),
+                closestVertex(face, 1.0F, 0.0F),
+                closestVertex(face, 1.0F, 1.0F),
+                closestVertex(face, 0.0F, 1.0F)
+        );
+    }
+
+    private static PaintableSailMesh.Vertex closestVertex(PaintableSailMesh.Face face, float targetU, float targetV) {
+        PaintableSailMesh.Vertex best = face.vertices()[0];
+        float bestDistance = Float.MAX_VALUE;
+        for (PaintableSailMesh.Vertex vertex : face.vertices()) {
+            float du = vertex.localU() - targetU;
+            float dv = vertex.localV() - targetV;
+            float distance = du * du + dv * dv;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = vertex;
+            }
+        }
+        return best;
+    }
+
+    private static Vector3f interpolate(GridCorners corners, float u, float v) {
+        Vector3f top = lerp(corners.topLeft(), corners.topRight(), u);
+        Vector3f bottom = lerp(corners.bottomLeft(), corners.bottomRight(), u);
+        return top.lerp(bottom, v);
+    }
+
+    private static Vector3f lerp(PaintableSailMesh.Vertex from, PaintableSailMesh.Vertex to, float delta) {
+        return new Vector3f(from.x(), from.y(), from.z()).lerp(new Vector3f(to.x(), to.y(), to.z()), delta);
+    }
+
+    private static void emitGridLine(
+            PaintableSailMesh.Face face,
+            PoseStack poseStack,
+            VertexConsumer vertexConsumer,
+            Vector3f from,
+            Vector3f to
+    ) {
+        float push = 0.014F;
+        Vector3f normal = face.normal();
+        Vector3f lineDirection = new Vector3f(to).sub(from);
+        normalizeLineDirection(lineDirection);
+        emitLineVertex(poseStack, vertexConsumer, from.x() + normal.x() * push, from.y() + normal.y() * push, from.z() + normal.z() * push, lineDirection, 255, 224, 124);
+        emitLineVertex(poseStack, vertexConsumer, to.x() + normal.x() * push, to.y() + normal.y() * push, to.z() + normal.z() * push, lineDirection, 255, 224, 124);
+    }
+
+    private static void normalizeLineDirection(Vector3f direction) {
+        if (direction.lengthSquared() > 0.00001F) {
+            direction.normalize();
+        } else {
+            direction.set(1.0F, 0.0F, 0.0F);
+        }
+    }
+
+    private static void emitLineVertex(
+            PoseStack poseStack,
+            VertexConsumer vertexConsumer,
+            float x,
+            float y,
+            float z,
+            Vector3f lineDirection,
+            int red,
+            int green,
+            int blue
+    ) {
+        PoseStack.Pose pose = poseStack.last();
+        vertexConsumer.vertex(pose.pose(), x, y, z)
+                .color(red, green, blue, 230)
+                .normal(pose.normal(), lineDirection.x(), lineDirection.y(), lineDirection.z())
+                .endVertex();
+    }
+
+    private record PointKey(int x, int y, int z) {
+    }
+
+    private record GridCorners(
+            PaintableSailMesh.Vertex topLeft,
+            PaintableSailMesh.Vertex topRight,
+            PaintableSailMesh.Vertex bottomRight,
+            PaintableSailMesh.Vertex bottomLeft
+    ) {
+    }
+}

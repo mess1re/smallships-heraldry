@@ -60,30 +60,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private static final int HELP_SIZE = 12;
     private static final int HELP_MARGIN = 5;
     private static final int HELP_Y = 5;
-    private static final int COLOR_X = RIGHT_X + 4;
-    private static final int COLOR_Y = 26;
-    private static final int COLOR_WIDTH = 62;
-    private static final int COLOR_HEIGHT = 52;
-    private static final int HUE_X = COLOR_X + COLOR_WIDTH + 6;
-    private static final int HUE_WIDTH = 8;
-    private static final int OPACITY_X = RIGHT_X + 4;
-    private static final int OPACITY_Y = 80;
-    private static final int OPACITY_WIDTH = RIGHT_WIDTH - 8;
-    private static final int OPACITY_HEIGHT = 5;
-    private static final int CURRENT_COLOR_X = RIGHT_X + 4;
-    private static final int CURRENT_COLOR_Y = 88;
-    private static final int CURRENT_COLOR_SIZE = 14;
-    private static final int HEX_X = RIGHT_X + 22;
-    private static final int HEX_Y = 88;
-    private static final int HEX_WIDTH = 62;
-    private static final int HEX_HEIGHT = 14;
-    private static final int CUSTOM_X = RIGHT_X + 4;
-    private static final int CUSTOM_Y = 106;
-    private static final int SWATCH_X = RIGHT_X + 4;
-    private static final int SWATCH_Y = 118;
-    private static final int SWATCH_SIZE = 8;
-    private static final int SWATCH_GAP = 2;
-    private static final int SWATCH_COLUMNS = 8;
     private static final int TOOL_X = ELEMENT_X + 16;
     private static final int TOOL_Y = 42;
     private static final int TOOL_WIDTH = 18;
@@ -98,27 +74,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private static final int SCOPE_ACTION_Y = 164;
     private static final int LIBRARY_BUTTON_Y = 188;
 
-    private static final int[] BASE_COLORS = {
-            0xFFFFFFFF, 0xFFD87F33, 0xFFB24CD8, 0xFF6699D8,
-            0xFFE5E533, 0xFF7FCC19, 0xFFF27FA5, 0xFF4C4C4C,
-            0xFF999999, 0xFF4C7F99, 0xFF7F3FB2, 0xFF334CB2,
-            0xFF664C33, 0xFF667F33, 0xFF993333, 0xFF191919
-    };
-    private static final int[] CUSTOM_COLORS = new int[SWATCH_COLUMNS];
-    private static boolean customColorsLoaded;
-
-    private HeraldryPatternData patternData = HeraldryPatternData.blank();
-    private HeraldryTableDrafts drafts = HeraldryTableDrafts.blank();
-    private int[] paintPixels = new int[HeraldryPatternData.MESH_PIXEL_COUNT];
+    private final HeraldryEditorSession session = new HeraldryEditorSession();
     private HeraldryDraftTexture draftTexture;
-    private ShipPreviewType previewType = ShipPreviewType.COG;
     private Ship previewShip;
     private final Map<String, Set<String>> hiddenElementsByContext = new HashMap<>();
     private final Map<String, Set<String>> selectedElementsByContext = new HashMap<>();
-    private final HeraldryEditorHistory editHistory = new HeraldryEditorHistory();
     private Set<String> hiddenElements = new LinkedHashSet<>();
     private Set<String> selectedElementIds = new LinkedHashSet<>();
-    private PaperEditBox hexInput;
+    private HeraldryColorPicker colorPicker;
     private PaperButton printButton;
     private PaperButton libraryButton;
     private HeraldryLibraryPanel libraryPanel;
@@ -128,11 +91,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private float previewZoom = 1.0F;
     private float previewPanX = 0.0F;
     private float previewPanY = 0.0F;
-    private float hue = 0.0F;
-    private float saturation = 0.66F;
-    private float brightness = 0.60F;
-    private int brushColor = 0xFF993333;
-    private int brushOpacity = 255;
     private PaintTool activeTool = PaintTool.BRUSH;
     private EditorMode editorMode = EditorMode.PAINT;
     private StrokeMode strokeMode = StrokeMode.FREEHAND;
@@ -146,9 +104,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private boolean temporaryPicker;
     private boolean rotatingPreview;
     private boolean panningPreview;
-    private boolean pickingColor;
-    private boolean pickingHue;
-    private boolean pickingOpacity;
     private boolean strokeUndoCaptured;
     private PaintableSailMesh.Hit strokeStartHit;
     private PaintableSailMesh.Hit lastStrokeHit;
@@ -160,13 +115,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private boolean helpVisible;
     private double lastMouseX;
     private double lastMouseY;
-    private boolean syncingHexInput;
-    private boolean draftInitialized;
     private boolean editorSettingsLoaded;
     private boolean draftSyncRequested;
-    private boolean localDirty;
-    private boolean draftSavePending;
-    private long draftSaveAt;
     private Component statusMessage;
     private long statusMessageUntil;
     private long clearConfirmationUntil;
@@ -183,10 +133,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     @Override
     protected void init() {
         super.init();
-        ensureCustomColorsLoaded();
+        if (colorPicker == null) {
+            colorPicker = new HeraldryColorPicker(font, RIGHT_X, RIGHT_WIDTH);
+        }
         if (!editorSettingsLoaded) {
             HeraldryClientSettings.EditorSettings settings = HeraldryClientSettings.loadEditorSettings();
-            setBrushColor(settings.brushColor());
+            colorPicker.setColor(settings.brushColor());
             activeTool = PaintTool.byName(settings.tool());
             editorMode = EditorMode.byName(settings.editorMode());
             strokeMode = StrokeMode.byName(settings.strokeMode());
@@ -201,39 +153,25 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             previewZoom = settings.previewZoom();
             editorSettingsLoaded = true;
         }
-        if (!draftInitialized) {
-            drafts = menu.getInitialDrafts();
-            previewType = drafts.activeShipType();
-            patternData = drafts.get(previewType);
-            paintPixels = patternData.toDenseMeshPixels();
-            draftInitialized = true;
-        }
+        session.initialize(menu.getInitialDrafts());
         switchElementContext();
-        this.patternData = patternData.withShipType(previewType);
         if (draftTexture == null) {
-            draftTexture = new HeraldryDraftTexture("table", paintPixels);
+            draftTexture = new HeraldryDraftTexture("table", session.pixels());
         }
         rebuildPreviewShip();
         requestDraftSync();
 
         int x0 = leftPos;
         int y0 = topPos;
-        hexInput = new PaperEditBox(font, x0 + HEX_X + 3, y0 + HEX_Y + 2, HEX_WIDTH - 6, HEX_HEIGHT - 4, Component.translatable("smallshipsheraldry.screen.hex"));
-        hexInput.setMaxLength(7);
-        hexInput.setBordered(false);
-        hexInput.setTextColor(HeraldryGuiTheme.INK);
-        hexInput.setTextColorUneditable(HeraldryGuiTheme.MUTED_INK);
-        hexInput.setFilter(HeraldryTableScreen::isHexDraft);
-        hexInput.setResponder(this::handleHexInput);
-        hexInput.visible = editorMode == EditorMode.PAINT && !libraryPanelVisible();
-        syncHexInput();
-        addRenderableWidget(hexInput);
+        PaperEditBox colorInput = colorPicker.init(x0, y0);
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && !libraryPanelVisible());
+        addRenderableWidget(colorInput);
 
         int previewCenter = x0 + PREVIEW_X + PREVIEW_WIDTH / 2;
         int controlY = y0 + 206;
         addRenderableWidget(new PaperButton(x0 + imageWidth - HELP_SIZE - HELP_MARGIN, y0 + HELP_Y, HELP_SIZE, HELP_SIZE, Component.literal("?"), button -> helpVisible = !helpVisible));
-        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + 12, controlY, 20, 18, Component.literal("<"), button -> changePreviewType(previewType.previous())));
-        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + PREVIEW_WIDTH - 32, controlY, 20, 18, Component.literal(">"), button -> changePreviewType(previewType.next())));
+        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + 12, controlY, 20, 18, Component.literal("<"), button -> changePreviewType(session.shipType().previous())));
+        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + PREVIEW_WIDTH - 32, controlY, 20, 18, Component.literal(">"), button -> changePreviewType(session.shipType().next())));
         addRenderableWidget(new PaperButton(previewCenter - 62, controlY, 24, 18, Component.literal("S<"), button -> changePreviewStage(previewStage - 1)));
         addRenderableWidget(new PaperButton(previewCenter + 38, controlY, 24, 18, Component.literal("S>"), button -> changePreviewStage(previewStage + 1)));
         if (libraryPanel == null) {
@@ -258,7 +196,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
         drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.preview"), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 18, HeraldryGuiTheme.INK);
         drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.stage", previewStage + 1), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 211, HeraldryGuiTheme.MUTED_INK);
-        drawCenteredNoShadow(guiGraphics, previewType.getDisplayName(), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 230, HeraldryGuiTheme.SELECTED);
+        drawCenteredNoShadow(guiGraphics, session.shipType().getDisplayName(), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 230, HeraldryGuiTheme.SELECTED);
     }
 
     @Override
@@ -277,7 +215,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryPanel != null) {
             libraryPanel.tick();
         }
-        if (draftSavePending && System.currentTimeMillis() >= draftSaveAt) {
+        if (session.saveDue(System.currentTimeMillis())) {
             sendDraftUpdate();
         }
     }
@@ -286,9 +224,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
-        if (hexInput != null) {
-            hexInput.visible = editorMode == EditorMode.PAINT && !libraryPanelVisible() && !helpVisible;
-        }
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && !libraryPanelVisible() && !helpVisible);
         if (draftTexture != null) {
             draftTexture.uploadIfDirty();
         }
@@ -314,7 +250,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     public void removed() {
         sendDraftUpdate();
         HeraldryClientSettings.saveEditorSettings(new HeraldryClientSettings.EditorSettings(
-                brushColor,
+                colorPicker.color(),
                 activeTool.label(),
                 editorMode.label(),
                 strokeMode.label(),
@@ -413,16 +349,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryPanelVisible()) {
             return true;
         }
-        if (pickingColor) {
-            setColorFromField(mouseX, mouseY);
-            return true;
-        }
-        if (pickingHue) {
-            setHueFromBar(mouseY);
-            return true;
-        }
-        if (pickingOpacity) {
-            setOpacityFromBar(mouseX);
+        if (colorPicker.mouseDragged(mouseX, mouseY)) {
             return true;
         }
         if (rotatingPreview && button == 1) {
@@ -465,9 +392,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             paintingPreview = false;
             rotatingPreview = false;
             panningPreview = false;
-            pickingColor = false;
-            pickingHue = false;
-            pickingOpacity = false;
+            colorPicker.mouseReleased();
             strokeUndoCaptured = false;
             temporaryPicker = false;
             strokeStartHit = null;
@@ -484,7 +409,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryPanelVisible()) {
             return libraryPanel.keyPressed(keyCode, scanCode, modifiers);
         }
-        if (hexInput != null && hexInput.isFocused()) {
+        if (colorPicker.isInputFocused()) {
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
         if (helpVisible && keyCode == GLFW.GLFW_KEY_ESCAPE) {
@@ -743,7 +668,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             guiGraphics.drawString(font, font.plainSubstrByWidth(selected.getString(), PREVIEW_WIDTH - 16), x0 + PREVIEW_X + 8, y0 + PREVIEW_Y + 8, HeraldryGuiTheme.GOLD_LIGHT, false);
         }
         if (paintingPreview && strokeMode == StrokeMode.LINE && strokeStartHit != null) {
-            drawScreenLine(guiGraphics, (int) strokeStartScreenX, (int) strokeStartScreenY, (int) strokeEndScreenX, (int) strokeEndScreenY, brushColor | 0xFF000000);
+            drawScreenLine(guiGraphics, (int) strokeStartScreenX, (int) strokeStartScreenY, (int) strokeEndScreenX, (int) strokeEndScreenY, colorPicker.color() | 0xFF000000);
         }
     }
 
@@ -751,9 +676,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         HeraldryGuiTheme.drawPanel(guiGraphics, x0 + RIGHT_X - 4, y0 + 18, RIGHT_WIDTH + 8, ELEMENT_HEIGHT + 22);
         switch (editorMode) {
             case PAINT -> {
-                drawColorPicker(guiGraphics, x0, y0);
-                drawCustomSwatches(guiGraphics, x0, y0);
-                drawBaseSwatches(guiGraphics, x0, y0);
+                colorPicker.render(guiGraphics);
                 drawControl(guiGraphics, x0 + RIGHT_X + 4, y0 + 142, 80, 17, false, Component.translatable("smallshipsheraldry.button.base"));
             }
             case PARTS -> drawPartsActions(guiGraphics, x0, y0);
@@ -782,98 +705,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.zoom_hint"), center, y0 + 86, HeraldryGuiTheme.MUTED_INK);
     }
 
-    private void drawColorPicker(GuiGraphics guiGraphics, int x0, int y0) {
-        guiGraphics.fill(x0 + COLOR_X - 1, y0 + COLOR_Y - 1, x0 + COLOR_X + COLOR_WIDTH + 1, y0 + COLOR_Y + COLOR_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
-        for (int x = 0; x < COLOR_WIDTH; x += 2) {
-            for (int y = 0; y < COLOR_HEIGHT; y += 2) {
-                float localSaturation = x / (float) (COLOR_WIDTH - 1);
-                float localBrightness = 1.0F - y / (float) (COLOR_HEIGHT - 1);
-                int color = 0xFF000000 | Mth.hsvToRgb(hue, localSaturation, localBrightness);
-                guiGraphics.fill(x0 + COLOR_X + x, y0 + COLOR_Y + y, x0 + COLOR_X + x + 2, y0 + COLOR_Y + y + 2, color);
-            }
-        }
-        guiGraphics.fill(x0 + HUE_X - 1, y0 + COLOR_Y - 1, x0 + HUE_X + HUE_WIDTH + 1, y0 + COLOR_Y + COLOR_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
-        for (int y = 0; y < COLOR_HEIGHT; y++) {
-            float localHue = Math.min(0.995F, y / (float) COLOR_HEIGHT);
-            int color = 0xFF000000 | Mth.hsvToRgb(localHue, 1.0F, 1.0F);
-            guiGraphics.fill(x0 + HUE_X, y0 + COLOR_Y + y, x0 + HUE_X + HUE_WIDTH, y0 + COLOR_Y + y + 1, color);
-        }
-        drawOpacityBar(guiGraphics, x0, y0);
-        int markerX = x0 + COLOR_X + Mth.clamp(Math.round(saturation * (COLOR_WIDTH - 1)), 0, COLOR_WIDTH - 1);
-        int markerY = y0 + COLOR_Y + Mth.clamp(Math.round((1.0F - brightness) * (COLOR_HEIGHT - 1)), 0, COLOR_HEIGHT - 1);
-        guiGraphics.fill(markerX - 2, markerY - 2, markerX + 3, markerY - 1, 0xFFFFFFFF);
-        guiGraphics.fill(markerX - 2, markerY + 2, markerX + 3, markerY + 3, 0xFFFFFFFF);
-        guiGraphics.fill(markerX - 2, markerY - 2, markerX - 1, markerY + 3, 0xFFFFFFFF);
-        guiGraphics.fill(markerX + 2, markerY - 2, markerX + 3, markerY + 3, 0xFFFFFFFF);
-
-        int hueY = y0 + COLOR_Y + Mth.clamp(Math.round(hue * COLOR_HEIGHT), 0, COLOR_HEIGHT - 1);
-        guiGraphics.fill(x0 + HUE_X - 2, hueY - 1, x0 + HUE_X + HUE_WIDTH + 2, hueY, 0xFF07101D);
-        guiGraphics.fill(x0 + HUE_X - 2, hueY, x0 + HUE_X + HUE_WIDTH + 2, hueY + 2, 0xFFFFFFFF);
-        int opacityX = x0 + OPACITY_X + Mth.clamp(Math.round((brushOpacity - 1) * (OPACITY_WIDTH - 1) / 254.0F), 0, OPACITY_WIDTH - 1);
-        guiGraphics.fill(opacityX - 1, y0 + OPACITY_Y - 2, opacityX, y0 + OPACITY_Y + OPACITY_HEIGHT + 2, 0xFF07101D);
-        guiGraphics.fill(opacityX, y0 + OPACITY_Y - 2, opacityX + 2, y0 + OPACITY_Y + OPACITY_HEIGHT + 2, 0xFFFFFFFF);
-        guiGraphics.fill(x0 + CURRENT_COLOR_X - 1, y0 + CURRENT_COLOR_Y - 1, x0 + CURRENT_COLOR_X + CURRENT_COLOR_SIZE + 1, y0 + CURRENT_COLOR_Y + CURRENT_COLOR_SIZE + 1, 0xFF07101D);
-        drawChecker(guiGraphics, x0 + CURRENT_COLOR_X, y0 + CURRENT_COLOR_Y, CURRENT_COLOR_SIZE, CURRENT_COLOR_SIZE);
-        guiGraphics.fill(x0 + CURRENT_COLOR_X, y0 + CURRENT_COLOR_Y, x0 + CURRENT_COLOR_X + CURRENT_COLOR_SIZE, y0 + CURRENT_COLOR_Y + CURRENT_COLOR_SIZE, brushColor);
-        guiGraphics.fill(x0 + HEX_X - 1, y0 + HEX_Y - 1, x0 + HEX_X + HEX_WIDTH + 1, y0 + HEX_Y + HEX_HEIGHT + 1, hexInput != null && hexInput.isFocused() ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
-        guiGraphics.fill(x0 + HEX_X, y0 + HEX_Y, x0 + HEX_X + HEX_WIDTH, y0 + HEX_Y + HEX_HEIGHT, HeraldryGuiTheme.PAPER);
-    }
-
-    private void drawOpacityBar(GuiGraphics guiGraphics, int x0, int y0) {
-        guiGraphics.fill(x0 + OPACITY_X - 1, y0 + OPACITY_Y - 1, x0 + OPACITY_X + OPACITY_WIDTH + 1, y0 + OPACITY_Y + OPACITY_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
-        drawChecker(guiGraphics, x0 + OPACITY_X, y0 + OPACITY_Y, OPACITY_WIDTH, OPACITY_HEIGHT);
-        int rgb = brushColor & 0x00FFFFFF;
-        for (int x = 0; x < OPACITY_WIDTH; x++) {
-            int alpha = Mth.clamp(Math.round(1.0F + x * 254.0F / (OPACITY_WIDTH - 1)), 1, 255);
-            guiGraphics.fill(x0 + OPACITY_X + x, y0 + OPACITY_Y, x0 + OPACITY_X + x + 1, y0 + OPACITY_Y + OPACITY_HEIGHT, (alpha << 24) | rgb);
-        }
-    }
-
-    private void drawChecker(GuiGraphics guiGraphics, int x, int y, int width, int height) {
-        for (int localY = 0; localY < height; localY += 2) {
-            for (int localX = 0; localX < width; localX += 2) {
-                boolean bright = ((localX + localY) / 2) % 2 == 0;
-                guiGraphics.fill(x + localX, y + localY, x + Math.min(localX + 2, width), y + Math.min(localY + 2, height), bright ? 0xFFE1E6EF : 0xFF77869A);
-            }
-        }
-    }
-
-    private void drawCustomSwatches(GuiGraphics guiGraphics, int x0, int y0) {
-        for (int index = 0; index < SWATCH_COLUMNS; index++) {
-            int x = x0 + CUSTOM_X + index * (SWATCH_SIZE + SWATCH_GAP);
-            int y = y0 + CUSTOM_Y;
-            int color = CUSTOM_COLORS[index];
-            boolean empty = color == 0;
-            boolean selected = color != 0 && color == brushColor;
-            guiGraphics.fill(x - 1, y - 1, x + SWATCH_SIZE + 1, y + SWATCH_SIZE + 1, selected ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
-            if (empty) {
-                guiGraphics.fill(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE, HeraldryGuiTheme.PAPER_ALT);
-            } else {
-                drawChecker(guiGraphics, x, y, SWATCH_SIZE, SWATCH_SIZE);
-                guiGraphics.fill(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE, color);
-            }
-            if (empty) {
-                int centerX = x + SWATCH_SIZE / 2;
-                int centerY = y + SWATCH_SIZE / 2;
-                guiGraphics.fill(centerX - 2, centerY, centerX + 3, centerY + 1, 0xFF6E7F96);
-                guiGraphics.fill(centerX, centerY - 2, centerX + 1, centerY + 3, 0xFF6E7F96);
-            }
-        }
-    }
-
-    private void drawBaseSwatches(GuiGraphics guiGraphics, int x0, int y0) {
-        for (int index = 0; index < BASE_COLORS.length; index++) {
-            int column = index % SWATCH_COLUMNS;
-            int row = index / SWATCH_COLUMNS;
-            int x = x0 + SWATCH_X + column * (SWATCH_SIZE + SWATCH_GAP);
-            int y = y0 + SWATCH_Y + row * (SWATCH_SIZE + SWATCH_GAP);
-            int color = BASE_COLORS[index];
-            boolean selected = (color & 0x00FFFFFF) == (brushColor & 0x00FFFFFF);
-            guiGraphics.fill(x - 1, y - 1, x + SWATCH_SIZE + 1, y + SWATCH_SIZE + 1, selected ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
-            guiGraphics.fill(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE, color);
-        }
-    }
-
     private void drawToolButtons(GuiGraphics guiGraphics, int x0, int y0) {
         PaintTool[] tools = PaintTool.values();
         for (int index = 0; index < tools.length; index++) {
@@ -897,31 +728,21 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryButton != null) {
             libraryButton.visible = false;
         }
-        if (hexInput != null) {
-            hexInput.visible = false;
-            hexInput.setFocused(false);
-        }
+        colorPicker.setVisible(false);
         libraryPanel.open();
     }
 
     private boolean hasDraftWork(ShipPreviewType shipType) {
-        HeraldryPatternData draft = drafts.get(shipType);
-        return draft.paintedPixelCount() > 0 || draft.baseColorArgb() != 0xFFFFFFFF;
+        return session.hasDraftWork(shipType);
     }
 
     private void loadLibraryPattern(HeraldryPatternData imported) {
-        HeraldryPatternData replaced = drafts.get(imported.shipType());
-        editHistory.rememberImportedOver(replaced);
-        previewType = imported.shipType();
-        patternData = imported;
-        drafts = drafts.withDraft(imported).withActiveShipType(previewType);
-        paintPixels = imported.toDenseMeshPixels();
+        session.importPattern(imported);
         if (draftTexture != null) {
-            draftTexture.replacePixels(paintPixels);
+            draftTexture.replacePixels(session.pixels());
             draftTexture.uploadIfDirty();
         }
         switchElementContext();
-        markDirty();
         rebuildPreviewShip();
     }
 
@@ -1018,12 +839,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             int y = topPos + MODE_TAB_Y;
             if (isInside(mouseX, mouseY, x, y, MODE_TAB_WIDTH - 1, MODE_TAB_HEIGHT)) {
                 editorMode = modes[index];
-                if (hexInput != null) {
-                    hexInput.visible = editorMode == EditorMode.PAINT;
-                    if (!hexInput.visible) {
-                        hexInput.setFocused(false);
-                    }
-                }
+                colorPicker.setVisible(editorMode == EditorMode.PAINT);
                 return true;
             }
         }
@@ -1070,7 +886,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
         }
         if (isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + SCOPE_ACTION_Y, 56, 17)) {
-            fillScope(brushColor, false);
+            fillScope(colorPicker.color(), false);
             return true;
         }
         if (isInside(mouseX, mouseY, leftPos + ELEMENT_X + 60, topPos + SCOPE_ACTION_Y, 56, 17)) {
@@ -1079,7 +895,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         if (isInside(mouseX, mouseY, leftPos + RIGHT_X + 4, topPos + 142, 80, 17)) {
             if (pushUndo()) {
-                patternData = patternData.withBaseColor(brushColor);
+                session.setBaseColor(colorPicker.color());
                 markDirty();
                 updatePreview();
             }
@@ -1133,7 +949,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         if (isInside(mouseX, mouseY, x, y + 108, 38, 18)) {
             if (!selectedElementIds.isEmpty()) {
-                fillScope(brushColor, false);
+                fillScope(colorPicker.color(), false);
             }
             return true;
         }
@@ -1211,11 +1027,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (!pushUndo()) {
             return;
         }
-        if (!PaintableSailMesh.fillScopedPixels(previewShip, previewStage, paintPixels, color, selectedElementIds, hiddenElements)) {
+        if (!PaintableSailMesh.fillScopedPixels(previewShip, previewStage, session.pixels(), color, selectedElementIds, hiddenElements)) {
             discardLatestUndo();
             return;
         }
-        draftTexture.replacePixels(paintPixels);
+        draftTexture.replacePixels(session.pixels());
         commitPaintBuffer();
     }
 
@@ -1305,51 +1121,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private boolean handleColorClick(double mouseX, double mouseY, int button) {
-        if (button != 0 && button != 1) {
-            return false;
-        }
-        if (button == 0 && isInside(mouseX, mouseY, leftPos + COLOR_X, topPos + COLOR_Y, COLOR_WIDTH, COLOR_HEIGHT)) {
-            pickingColor = true;
-            setColorFromField(mouseX, mouseY);
-            return true;
-        }
-        if (button == 0 && isInside(mouseX, mouseY, leftPos + HUE_X, topPos + COLOR_Y, HUE_WIDTH, COLOR_HEIGHT)) {
-            pickingHue = true;
-            setHueFromBar(mouseY);
-            return true;
-        }
-        if (button == 0 && isInside(mouseX, mouseY, leftPos + OPACITY_X, topPos + OPACITY_Y, OPACITY_WIDTH, OPACITY_HEIGHT)) {
-            pickingOpacity = true;
-            setOpacityFromBar(mouseX);
-            return true;
-        }
-        for (int index = 0; index < SWATCH_COLUMNS; index++) {
-            int x = leftPos + CUSTOM_X + index * (SWATCH_SIZE + SWATCH_GAP);
-            int y = topPos + CUSTOM_Y;
-            if (isInside(mouseX, mouseY, x, y, SWATCH_SIZE, SWATCH_SIZE)) {
-                if (button == 1 || hasShiftDown() || CUSTOM_COLORS[index] == 0) {
-                    CUSTOM_COLORS[index] = brushColor;
-                    HeraldryClientSettings.saveCustomColors(CUSTOM_COLORS);
-                } else {
-                    setBrushColor(CUSTOM_COLORS[index]);
-                }
-                return true;
-            }
-        }
-        if (button != 0) {
-            return false;
-        }
-        for (int index = 0; index < BASE_COLORS.length; index++) {
-            int column = index % SWATCH_COLUMNS;
-            int row = index / SWATCH_COLUMNS;
-            int x = leftPos + SWATCH_X + column * (SWATCH_SIZE + SWATCH_GAP);
-            int y = topPos + SWATCH_Y + row * (SWATCH_SIZE + SWATCH_GAP);
-            if (isInside(mouseX, mouseY, x, y, SWATCH_SIZE, SWATCH_SIZE)) {
-                setBrushColor(BASE_COLORS[index]);
-                return true;
-            }
-        }
-        return false;
+        return colorPicker.mouseClicked(mouseX, mouseY, button, hasShiftDown());
     }
 
     private boolean useToolOnPreview(double mouseX, double mouseY) {
@@ -1364,8 +1136,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
 
         if (temporaryPicker || activeTool == PaintTool.PICKER) {
-            int sampledColor = paintPixels[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
-            setBrushColor((sampledColor >>> 24) == 0 ? patternData.baseColorArgb() : sampledColor);
+            int sampledColor = session.pixels()[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
+            colorPicker.setColor((sampledColor >>> 24) == 0 ? session.pattern().baseColorArgb() : sampledColor);
             return true;
         }
 
@@ -1374,11 +1146,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             boolean changed = switch (fillMode) {
-                case AREA -> PaintableSailMesh.floodFillPixels(previewShip, paintHit, previewStage, paintPixels, brushColor);
-                case FACE -> PaintableSailMesh.fillFacePixels(previewShip, paintHit.faceIndex(), previewStage, paintPixels, brushColor);
+                case AREA -> PaintableSailMesh.floodFillPixels(previewShip, paintHit, previewStage, session.pixels(), colorPicker.color());
+                case FACE -> PaintableSailMesh.fillFacePixels(previewShip, paintHit.faceIndex(), previewStage, session.pixels(), colorPicker.color());
                 case REPLACE -> {
-                    int source = paintPixels[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
-                    yield PaintableSailMesh.replaceColorPixels(previewShip, previewStage, paintPixels, source, brushColor, selectedElementIds, hiddenElements);
+                    int source = session.pixels()[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
+                    yield PaintableSailMesh.replaceColorPixels(previewShip, previewStage, session.pixels(), source, colorPicker.color(), selectedElementIds, hiddenElements);
                 }
             };
             if (!changed) {
@@ -1386,7 +1158,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             if (fillMode == FillMode.REPLACE) {
-                draftTexture.replacePixels(paintPixels);
+                draftTexture.replacePixels(session.pixels());
             } else {
                 syncHitFace(paintHit);
             }
@@ -1394,7 +1166,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return true;
         }
 
-        int color = activeTool == PaintTool.ERASER ? 0 : brushColor;
+        int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
         if (!strokeUndoCaptured) {
             if (!pushUndo()) {
                 return true;
@@ -1403,16 +1175,16 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         boolean changed;
         if (lastStrokeHit != null && lastStrokeHit.faceIndex() == paintHit.faceIndex()) {
-            changed = PaintableSailMesh.paintLinePixels(previewShip, lastStrokeHit, paintHit, previewStage, paintPixels, color,
+            changed = PaintableSailMesh.paintLinePixels(previewShip, lastStrokeHit, paintHit, previewStage, session.pixels(), color,
                     brushSize, mirrorVertical, mirrorHorizontal);
         } else {
-            changed = PaintableSailMesh.paintBrushPixels(previewShip, paintHit, previewStage, paintPixels, color,
+            changed = PaintableSailMesh.paintBrushPixels(previewShip, paintHit, previewStage, session.pixels(), color,
                     brushSize, mirrorVertical, mirrorHorizontal);
         }
         lastStrokeHit = paintHit;
         if (changed) {
             syncHitFace(paintHit);
-            localDirty = true;
+            session.markLocallyModified();
         }
         return true;
     }
@@ -1441,7 +1213,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     private void syncHitFace(PaintableSailMesh.Hit hit) {
         if (draftTexture != null) {
-            draftTexture.updateRegion(paintPixels, hit.slotX() - 1, hit.slotY() - 1, hit.slotWidth() + 2, hit.slotHeight() + 2);
+            draftTexture.updateRegion(session.pixels(), hit.slotX() - 1, hit.slotY() - 1, hit.slotWidth() + 2, hit.slotHeight() + 2);
             draftTexture.uploadIfDirty();
         }
     }
@@ -1450,9 +1222,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (strokeStartHit == null || lastStrokeHit == null || !pushUndo()) {
             return;
         }
-        int color = activeTool == PaintTool.ERASER ? 0 : brushColor;
+        int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
         boolean changed = PaintableSailMesh.paintLinePixels(previewShip, strokeStartHit, lastStrokeHit, previewStage,
-                paintPixels, color, brushSize, mirrorVertical, mirrorHorizontal);
+                session.pixels(), color, brushSize, mirrorVertical, mirrorHorizontal);
         if (!changed) {
             discardLatestUndo();
             return;
@@ -1461,7 +1233,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (lastStrokeHit.faceIndex() != strokeStartHit.faceIndex()) {
             syncHitFace(lastStrokeHit);
         }
-        localDirty = true;
+        session.markLocallyModified();
         commitPaintBuffer();
     }
 
@@ -1531,20 +1303,16 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void changePreviewType(ShipPreviewType newPreviewType) {
-        if (newPreviewType == previewType || currentData() == null) {
+        if (newPreviewType == session.shipType() || currentData() == null) {
             return;
         }
-        drafts = drafts.withActiveShipType(newPreviewType);
-        previewType = newPreviewType;
-        patternData = drafts.get(previewType);
-        paintPixels = patternData.toDenseMeshPixels();
+        session.switchShip(newPreviewType);
         if (draftTexture != null) {
-            draftTexture.replacePixels(paintPixels);
+            draftTexture.replacePixels(session.pixels());
         }
         switchElementContext();
         previewPanX = 0.0F;
         previewPanY = 0.0F;
-        markDirty();
         rebuildPreviewShip();
     }
 
@@ -1563,7 +1331,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         buf.writeBlockPos(menu.getBlockPos());
         buf.writeNbt(data.toTag());
         NetworkManager.sendToServer(HeraldryPackets.EXPORT_PATTERN, buf);
-        draftSavePending = false;
+        session.markSaved();
     }
 
     private void sendDraftUpdate() {
@@ -1573,9 +1341,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(menu.getBlockPos());
-        buf.writeNbt(drafts.toTag());
+        buf.writeNbt(session.drafts().toTag());
         NetworkManager.sendToServer(HeraldryPackets.TABLE_DRAFT_UPDATE, buf);
-        draftSavePending = false;
+        session.markSaved();
     }
 
     private void requestDraftSync() {
@@ -1597,20 +1365,17 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void applyDraftSync(BlockPos blockPos, CompoundTag draftTag) {
-        if (!menu.getBlockPos().equals(blockPos) || draftTag == null || localDirty) {
+        if (!menu.getBlockPos().equals(blockPos) || draftTag == null) {
             return;
         }
-
-        drafts = HeraldryTableDrafts.fromTag(draftTag);
-        previewType = drafts.activeShipType();
-        patternData = drafts.get(previewType);
-        paintPixels = patternData.toDenseMeshPixels();
+        if (!session.applyServerSync(HeraldryTableDrafts.fromTag(draftTag))) {
+            return;
+        }
         if (draftTexture != null) {
-            draftTexture.replacePixels(paintPixels);
+            draftTexture.replacePixels(session.pixels());
         }
         hiddenElementsByContext.clear();
         selectedElementsByContext.clear();
-        editHistory.clear();
         switchElementContext();
         rebuildPreviewShip();
     }
@@ -1624,28 +1389,21 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void rebuildPreviewShip() {
-        previewShip = PreviewShipFactory.create(previewType, patternData.withShipType(previewType), previewStage);
+        previewShip = PreviewShipFactory.create(session.shipType(), session.pattern().withShipType(session.shipType()), previewStage);
     }
 
     private void updatePreview() {
         if (previewShip == null) {
             rebuildPreviewShip();
         } else {
-            PreviewShipFactory.applyBaseColor(previewShip, patternData.baseColorArgb());
+            PreviewShipFactory.applyBaseColor(previewShip, session.pattern().baseColorArgb());
             PreviewShipFactory.setSailState(previewShip, previewStage);
         }
     }
 
     private HeraldryPatternData currentData() {
         try {
-            patternData = HeraldryPatternData.fromMeshPixels(
-                    patternData.author(),
-                    previewType,
-                    patternData.baseColorArgb(),
-                    paintPixels
-            );
-            drafts = drafts.withDraft(patternData);
-            return patternData;
+            return session.currentPattern();
         } catch (HeraldryPatternData.PatternTooComplexException exception) {
             showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
             return null;
@@ -1658,22 +1416,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             updatePreview();
             return;
         }
-        if (editHistory.canUndo(previewType)) {
-            editHistory.takeLatestUndo(previewType).ifPresent(this::restoreSnapshot);
-        }
+        session.restoreFailedEdit().ifPresent(this::applyRestore);
     }
 
-    private void restoreSnapshot(HeraldryPatternData snapshot) {
-        boolean shipChanged = previewType != snapshot.shipType();
-        patternData = snapshot;
-        previewType = snapshot.shipType();
-        drafts = drafts.withDraft(snapshot).withActiveShipType(previewType);
-        paintPixels = snapshot.toDenseMeshPixels();
+    private void applyRestore(HeraldryEditorSession.Restore restore) {
         if (draftTexture != null) {
-            draftTexture.replacePixels(paintPixels);
+            draftTexture.replacePixels(session.pixels());
         }
-        markDirty();
-        if (shipChanged) {
+        if (restore.shipChanged()) {
             switchElementContext();
             rebuildPreviewShip();
         } else {
@@ -1682,7 +1432,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void discardLatestUndo() {
-        editHistory.discardLatestUndo(previewType);
+        session.discardLatestUndo();
     }
 
     private void showStatus(Component message) {
@@ -1691,155 +1441,32 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void markDirty() {
-        localDirty = true;
-        draftSavePending = true;
-        draftSaveAt = System.currentTimeMillis() + 750L;
+        session.markDirty();
     }
 
     private boolean pushUndo() {
-        HeraldryPatternData snapshot = currentData();
-        if (snapshot == null) {
+        try {
+            return session.pushUndo();
+        } catch (HeraldryPatternData.PatternTooComplexException exception) {
+            showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
             return false;
         }
-        editHistory.push(previewType, snapshot);
-        return true;
     }
 
     private void undo() {
-        if (!editHistory.canUndo(previewType)) {
-            return;
+        try {
+            session.undo().ifPresent(this::applyRestore);
+        } catch (HeraldryPatternData.PatternTooComplexException exception) {
+            showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
         }
-        HeraldryPatternData current = currentData();
-        if (current == null) {
-            return;
-        }
-        editHistory.undo(previewType, current).ifPresent(this::restoreSnapshot);
     }
 
     private void redo() {
-        if (!editHistory.canRedo(previewType)) {
-            return;
+        try {
+            session.redo().ifPresent(this::applyRestore);
+        } catch (HeraldryPatternData.PatternTooComplexException exception) {
+            showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
         }
-        HeraldryPatternData current = currentData();
-        if (current == null) {
-            return;
-        }
-        editHistory.redo(previewType, current).ifPresent(this::restoreSnapshot);
-    }
-
-    private void setColorFromField(double mouseX, double mouseY) {
-        saturation = Mth.clamp((float) ((mouseX - (leftPos + COLOR_X)) / (COLOR_WIDTH - 1)), 0.0F, 1.0F);
-        brightness = Mth.clamp(1.0F - (float) ((mouseY - (topPos + COLOR_Y)) / (COLOR_HEIGHT - 1)), 0.0F, 1.0F);
-        rebuildBrushColor();
-    }
-
-    private void setHueFromBar(double mouseY) {
-        hue = Mth.clamp((float) ((mouseY - (topPos + COLOR_Y)) / COLOR_HEIGHT), 0.0F, 0.995F);
-        rebuildBrushColor();
-    }
-
-    private void setOpacityFromBar(double mouseX) {
-        float value = Mth.clamp((float) ((mouseX - (leftPos + OPACITY_X)) / (OPACITY_WIDTH - 1)), 0.0F, 1.0F);
-        brushOpacity = Mth.clamp(Math.round(1.0F + value * 254.0F), 1, 255);
-        rebuildBrushColor();
-    }
-
-    private void rebuildBrushColor() {
-        brushColor = (brushOpacity << 24) | Mth.hsvToRgb(hue, saturation, brightness);
-        syncHexInput();
-    }
-
-    private void setBrushColor(int argb) {
-        int alpha = (argb >>> 24) & 0xFF;
-        brushOpacity = alpha == 0 ? 255 : alpha;
-        brushColor = (argb & 0x00FFFFFF) | (brushOpacity << 24);
-        float red = ((brushColor >> 16) & 0xFF) / 255.0F;
-        float green = ((brushColor >> 8) & 0xFF) / 255.0F;
-        float blue = (brushColor & 0xFF) / 255.0F;
-        float max = Math.max(red, Math.max(green, blue));
-        float min = Math.min(red, Math.min(green, blue));
-        float delta = max - min;
-
-        brightness = max;
-        saturation = max <= 0.0001F ? 0.0F : delta / max;
-        if (delta <= 0.0001F) {
-            hue = 0.0F;
-        } else if (max == red) {
-            hue = ((green - blue) / delta) / 6.0F;
-        } else if (max == green) {
-            hue = (2.0F + (blue - red) / delta) / 6.0F;
-        } else {
-            hue = (4.0F + (red - green) / delta) / 6.0F;
-        }
-        if (hue < 0.0F) {
-            hue += 1.0F;
-        }
-        hue = Mth.clamp(hue, 0.0F, 0.995F);
-        syncHexInput();
-    }
-
-    private void handleHexInput(String value) {
-        if (syncingHexInput) {
-            return;
-        }
-        String clean = cleanHex(value);
-        if (clean.length() != 6 || !isHex(clean)) {
-            return;
-        }
-        int color = (brushOpacity << 24) | Integer.parseInt(clean, 16);
-        if ((color & 0x00FFFFFF) == (brushColor & 0x00FFFFFF)) {
-            return;
-        }
-        setBrushColor(color);
-    }
-
-    private void syncHexInput() {
-        if (hexInput == null) {
-            return;
-        }
-        String value = String.format("#%06X", brushColor & 0x00FFFFFF);
-        if (value.equals(hexInput.getValue())) {
-            return;
-        }
-        syncingHexInput = true;
-        hexInput.setValue(value);
-        syncingHexInput = false;
-    }
-
-    private static boolean isHexDraft(String value) {
-        if (value.length() > 7) {
-            return false;
-        }
-        if (value.indexOf('#') > 0) {
-            return false;
-        }
-        String clean = cleanHex(value);
-        return clean.length() <= 6 && isHex(clean);
-    }
-
-    private static String cleanHex(String value) {
-        return value.startsWith("#") ? value.substring(1) : value;
-    }
-
-    private static boolean isHex(String value) {
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            boolean digit = character >= '0' && character <= '9';
-            boolean upper = character >= 'A' && character <= 'F';
-            boolean lower = character >= 'a' && character <= 'f';
-            if (!digit && !upper && !lower) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static void ensureCustomColorsLoaded() {
-        if (customColorsLoaded) {
-            return;
-        }
-        customColorsLoaded = true;
-        HeraldryClientSettings.loadCustomColors(CUSTOM_COLORS);
     }
 
     private Component gridButtonText() {
@@ -1918,7 +1545,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private List<PaintableSailMesh.Element> elements() {
-        List<PaintableSailMesh.Element> elements = new ArrayList<>(PaintableSailMesh.elements(previewType, previewStage));
+        List<PaintableSailMesh.Element> elements = new ArrayList<>(PaintableSailMesh.elements(session.shipType(), previewStage));
         elements.sort((first, second) -> {
             int category = Integer.compare(elementCategory(first.id()), elementCategory(second.id()));
             return category != 0 ? category : first.id().compareTo(second.id());
@@ -1976,7 +1603,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void switchElementContext() {
-        String key = previewType.serializedName() + ":" + previewStage;
+        String key = session.shipType().serializedName() + ":" + previewStage;
         hiddenElements = hiddenElementsByContext.computeIfAbsent(key, ignored -> new LinkedHashSet<>());
         selectedElementIds = selectedElementsByContext.computeIfAbsent(key, ignored -> new LinkedHashSet<>());
         elementScroll = 0;
