@@ -28,6 +28,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.lang.reflect.Field;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -388,6 +389,283 @@ public final class PaintableSailMesh {
             }
         }
         return false;
+    }
+
+    public static boolean paintBrushPixels(
+            Ship ship,
+            Hit hit,
+            int stage,
+            int[] meshPixels,
+            int color,
+            int size,
+            boolean mirrorVertical,
+            boolean mirrorHorizontal
+    ) {
+        Face face = faceForHit(ship, hit, stage);
+        if (face == null || meshPixels == null) {
+            return false;
+        }
+
+        AtlasSlot slot = face.slot();
+        int localX = hit.pixelX() - slot.x();
+        int localY = hit.pixelY() - slot.y();
+        int clampedSize = Mth.clamp(size, 1, 8);
+        return paintBrushWithMirrors(face, localX, localY, meshPixels, color, clampedSize, mirrorVertical, mirrorHorizontal);
+    }
+
+    private static boolean paintBrushWithMirrors(
+            Face face,
+            int localX,
+            int localY,
+            int[] meshPixels,
+            int color,
+            int size,
+            boolean mirrorVertical,
+            boolean mirrorHorizontal
+    ) {
+        AtlasSlot slot = face.slot();
+        boolean changed = paintBrushAt(face, localX, localY, meshPixels, color, size);
+        if (mirrorVertical) {
+            changed |= paintBrushAt(face, slot.width() - 1 - localX, localY, meshPixels, color, size);
+        }
+        if (mirrorHorizontal) {
+            changed |= paintBrushAt(face, localX, slot.height() - 1 - localY, meshPixels, color, size);
+        }
+        if (mirrorVertical && mirrorHorizontal) {
+            changed |= paintBrushAt(face, slot.width() - 1 - localX, slot.height() - 1 - localY, meshPixels, color, size);
+        }
+        return changed;
+    }
+
+    public static boolean paintLinePixels(
+            Ship ship,
+            Hit start,
+            Hit end,
+            int stage,
+            int[] meshPixels,
+            int color,
+            int size,
+            boolean mirrorVertical,
+            boolean mirrorHorizontal
+    ) {
+        if (start == null || end == null || start.faceIndex() != end.faceIndex()) {
+            return paintBrushPixels(ship, end, stage, meshPixels, color, size, mirrorVertical, mirrorHorizontal);
+        }
+        Face face = faceForHit(ship, start, stage);
+        if (face == null || meshPixels == null) {
+            return false;
+        }
+
+        AtlasSlot slot = face.slot();
+        int x0 = start.pixelX() - slot.x();
+        int y0 = start.pixelY() - slot.y();
+        int x1 = end.pixelX() - slot.x();
+        int y1 = end.pixelY() - slot.y();
+        int dx = Math.abs(x1 - x0);
+        int stepX = x0 < x1 ? 1 : -1;
+        int dy = -Math.abs(y1 - y0);
+        int stepY = y0 < y1 ? 1 : -1;
+        int error = dx + dy;
+        int clampedSize = Mth.clamp(size, 1, 8);
+        boolean changed = false;
+        while (true) {
+            changed |= paintBrushWithMirrors(face, x0, y0, meshPixels, color, clampedSize, mirrorVertical, mirrorHorizontal);
+            if (x0 == x1 && y0 == y1) {
+                break;
+            }
+            int twiceError = error * 2;
+            if (twiceError >= dy) {
+                error += dy;
+                x0 += stepX;
+            }
+            if (twiceError <= dx) {
+                error += dx;
+                y0 += stepY;
+            }
+        }
+        return changed;
+    }
+
+    public static boolean floodFillPixels(Ship ship, Hit hit, int stage, int[] meshPixels, int color) {
+        Face face = faceForHit(ship, hit, stage);
+        if (face == null || meshPixels == null) {
+            return false;
+        }
+
+        AtlasSlot slot = face.slot();
+        int startX = hit.pixelX() - slot.x();
+        int startY = hit.pixelY() - slot.y();
+        if (!isInsideFacePixel(face, startX, startY)) {
+            return false;
+        }
+        int source = meshPixels[hit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + hit.pixelX()];
+        if (source == color) {
+            return false;
+        }
+
+        boolean[] visited = new boolean[slot.width() * slot.height()];
+        ArrayDeque<Integer> pending = new ArrayDeque<>();
+        pending.add(startY * slot.width() + startX);
+        boolean changed = false;
+        while (!pending.isEmpty()) {
+            int packed = pending.removeFirst();
+            if (packed < 0 || packed >= visited.length || visited[packed]) {
+                continue;
+            }
+            visited[packed] = true;
+            int localX = packed % slot.width();
+            int localY = packed / slot.width();
+            if (!isInsideFacePixel(face, localX, localY)) {
+                continue;
+            }
+            int atlasX = slot.x() + localX;
+            int atlasY = slot.y() + localY;
+            int index = atlasY * HeraldryPatternData.MESH_ATLAS_WIDTH + atlasX;
+            if (meshPixels[index] != source) {
+                continue;
+            }
+            setMeshPixel(meshPixels, face, localX, localY, color);
+            changed = true;
+            if (localX > 0) pending.add(packed - 1);
+            if (localX + 1 < slot.width()) pending.add(packed + 1);
+            if (localY > 0) pending.add(packed - slot.width());
+            if (localY + 1 < slot.height()) pending.add(packed + slot.width());
+        }
+        return changed;
+    }
+
+    public static boolean replaceColorPixels(
+            Ship ship,
+            int stage,
+            int[] meshPixels,
+            int source,
+            int color,
+            Set<String> selectedElements,
+            Set<String> hiddenElements
+    ) {
+        if (ship == null || meshPixels == null || source == color) {
+            return false;
+        }
+        Definition definition = definition(ShipPreviewType.fromShip(ship));
+        boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
+        boolean changed = false;
+        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
+            if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
+                continue;
+            }
+            if (restrictSelection && !selectedElements.contains(face.elementId())) {
+                continue;
+            }
+            AtlasSlot slot = face.slot();
+            for (int y = 0; y < slot.height(); y++) {
+                for (int x = 0; x < slot.width(); x++) {
+                    if (!isInsideFacePixel(face, x, y)) {
+                        continue;
+                    }
+                    int index = (slot.y() + y) * HeraldryPatternData.MESH_ATLAS_WIDTH + slot.x() + x;
+                    if (meshPixels[index] == source) {
+                        setMeshPixel(meshPixels, face, x, y, color);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    public static boolean fillScopedPixels(
+            Ship ship,
+            int stage,
+            int[] meshPixels,
+            int color,
+            Set<String> selectedElements,
+            Set<String> hiddenElements
+    ) {
+        if (ship == null || meshPixels == null) {
+            return false;
+        }
+        Definition definition = definition(ShipPreviewType.fromShip(ship));
+        boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
+        boolean changed = false;
+        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
+            if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
+                continue;
+            }
+            if (restrictSelection && !selectedElements.contains(face.elementId())) {
+                continue;
+            }
+            fillFacePixels(face, meshPixels, color);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static Face faceForHit(Ship ship, Hit hit, int stage) {
+        if (ship == null || hit == null) {
+            return null;
+        }
+        Definition definition = definition(ShipPreviewType.fromShip(ship));
+        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
+            if (face.faceIndex() == hit.faceIndex()) {
+                return face;
+            }
+        }
+        return null;
+    }
+
+    private static boolean paintBrushAt(Face face, int centerX, int centerY, int[] meshPixels, int color, int size) {
+        int firstOffset = -(size / 2);
+        int lastOffset = firstOffset + size - 1;
+        boolean changed = false;
+        AtlasSlot slot = face.slot();
+        for (int offsetY = firstOffset; offsetY <= lastOffset; offsetY++) {
+            for (int offsetX = firstOffset; offsetX <= lastOffset; offsetX++) {
+                int localX = centerX + offsetX;
+                int localY = centerY + offsetY;
+                if (!isInsideFacePixel(face, localX, localY)) {
+                    continue;
+                }
+                int index = (slot.y() + localY) * HeraldryPatternData.MESH_ATLAS_WIDTH + slot.x() + localX;
+                if (meshPixels[index] != color) {
+                    setMeshPixel(meshPixels, face, localX, localY, color);
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
+    private static boolean isInsideFacePixel(Face face, int localX, int localY) {
+        AtlasSlot slot = face.slot();
+        if (localX < 0 || localX >= slot.width() || localY < 0 || localY >= slot.height()) {
+            return false;
+        }
+        Vertex[] vertices = face.vertices();
+        float x = localX + 0.5F;
+        float y = localY + 0.5F;
+        return isInsideTriangle(vertices[0], vertices[1], vertices[2], slot, x, y)
+                || isInsideTriangle(vertices[0], vertices[2], vertices[3], slot, x, y);
+    }
+
+    private static boolean isInsideTriangle(Vertex first, Vertex second, Vertex third, AtlasSlot slot, float x, float y) {
+        float ax = first.localU() * slot.width();
+        float ay = first.localV() * slot.height();
+        float bx = second.localU() * slot.width();
+        float by = second.localV() * slot.height();
+        float cx = third.localU() * slot.width();
+        float cy = third.localV() * slot.height();
+        float denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+        if (Math.abs(denominator) < 0.00001F) {
+            float minX = Math.min(ax, Math.min(bx, cx));
+            float maxX = Math.max(ax, Math.max(bx, cx));
+            float minY = Math.min(ay, Math.min(by, cy));
+            float maxY = Math.max(ay, Math.max(by, cy));
+            return x >= minX && x <= maxX && y >= minY && y <= maxY;
+        }
+        float weightA = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denominator;
+        float weightB = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denominator;
+        float weightC = 1.0F - weightA - weightB;
+        return weightA >= -0.001F && weightB >= -0.001F && weightC >= -0.001F;
     }
 
     private static List<Face> editorFaces(
@@ -903,7 +1181,8 @@ public final class PaintableSailMesh {
         AtlasSlot slot = face.slot();
         int pixelX = slot.x() + clampTilePixel(Mth.floor(u * slot.width()), slot.width());
         int pixelY = slot.y() + clampTilePixel(Mth.floor(v * slot.height()), slot.height());
-        return new Hit(face.state(), face.elementId(), face.faceIndex(), pixelX, pixelY);
+        return new Hit(face.state(), face.elementId(), face.faceIndex(), pixelX, pixelY,
+                slot.x(), slot.y(), slot.width(), slot.height());
     }
 
     private static void fillFacePixels(Face face, int[] meshPixels, int color) {
@@ -1450,7 +1729,17 @@ public final class PaintableSailMesh {
     public record Element(String id, String label) {
     }
 
-    public record Hit(int stage, String elementId, int faceIndex, int pixelX, int pixelY) {
+    public record Hit(
+            int stage,
+            String elementId,
+            int faceIndex,
+            int pixelX,
+            int pixelY,
+            int slotX,
+            int slotY,
+            int slotWidth,
+            int slotHeight
+    ) {
     }
 
     private record ProjectedVertex(float x, float y, float depth, float u, float v) {

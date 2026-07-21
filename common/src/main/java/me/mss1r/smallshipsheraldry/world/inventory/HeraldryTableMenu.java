@@ -3,6 +3,7 @@ package me.mss1r.smallshipsheraldry.world.inventory;
 import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
+import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.network.HeraldryPackets;
 import me.mss1r.smallshipsheraldry.registry.HeraldryMenus;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
@@ -26,22 +27,24 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
     public static final int RESULT_SLOT_Y = 206;
     public static final int SLOT_ACTION_INSERT = 0;
     public static final int SLOT_ACTION_EXTRACT = 1;
+    public static final int SLOT_ACTION_INSERT_ALL = 2;
+    public static final int SLOT_ACTION_EXTRACT_ONE = 3;
 
     private final HeraldryTableBlockEntity blockEntity;
     private final Level level;
     private final BlockPos blockPos;
-    private final HeraldryPatternData initialDraftData;
+    private final HeraldryTableDrafts initialDrafts;
 
     public HeraldryTableMenu(int containerId, Inventory inventory, HeraldryTableBlockEntity blockEntity) {
-        this(containerId, inventory, blockEntity, blockEntity.getDraftData());
+        this(containerId, inventory, blockEntity, blockEntity.getDrafts());
     }
 
-    public HeraldryTableMenu(int containerId, Inventory inventory, HeraldryTableBlockEntity blockEntity, HeraldryPatternData initialDraftData) {
+    public HeraldryTableMenu(int containerId, Inventory inventory, HeraldryTableBlockEntity blockEntity, HeraldryTableDrafts initialDrafts) {
         super(HeraldryMenus.HERALDRY_TABLE.get(), containerId);
         this.blockEntity = blockEntity;
         this.level = inventory.player.level();
         this.blockPos = blockEntity.getBlockPos();
-        this.initialDraftData = initialDraftData == null ? HeraldryPatternData.blank() : initialDraftData;
+        this.initialDrafts = initialDrafts == null ? HeraldryTableDrafts.blank() : initialDrafts;
 
         addSlot(new Slot(blockEntity, HeraldryTableBlockEntity.PAPER_SLOT, PAPER_SLOT_X, PAPER_SLOT_Y) {
             @Override
@@ -60,11 +63,12 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
 
     public static HeraldryTableMenu fromNetwork(int containerId, Inventory inventory, FriendlyByteBuf buf) {
         BlockPos blockPos = buf.readBlockPos();
+        HeraldryTableDrafts initialDrafts = HeraldryTableDrafts.fromTag(buf.readNbt());
         Container container = inventory.player.level().getBlockEntity(blockPos) instanceof HeraldryTableBlockEntity blockEntity
                 ? blockEntity
                 : null;
         if (container instanceof HeraldryTableBlockEntity blockEntity) {
-            return new HeraldryTableMenu(containerId, inventory, blockEntity);
+            return new HeraldryTableMenu(containerId, inventory, blockEntity, initialDrafts);
         }
         throw new IllegalStateException("Missing heraldry table block entity at " + blockPos);
     }
@@ -81,8 +85,8 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         return blockEntity.getItem(HeraldryTableBlockEntity.RESULT_SLOT);
     }
 
-    public HeraldryPatternData getInitialDraftData() {
-        return initialDraftData;
+    public HeraldryTableDrafts getInitialDrafts() {
+        return initialDrafts;
     }
 
     public void handleExportRequest(ServerPlayer serverPlayer, BlockPos expectedBlockPos, CompoundTag patternTag) {
@@ -101,9 +105,9 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
             return;
         }
 
-        HeraldryPatternData.tryFromRootTag(patternTag)
-                .map(data -> data.withAuthor(serverPlayer.getGameProfile().getName()))
-                .ifPresent(blockEntity::setDraftData);
+        HeraldryTableDrafts drafts = HeraldryTableDrafts.fromTag(patternTag)
+                .withAuthor(serverPlayer.getGameProfile().getName());
+        blockEntity.setDrafts(drafts);
     }
 
     public void handleDraftRequest(ServerPlayer serverPlayer, BlockPos expectedBlockPos) {
@@ -113,7 +117,7 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
 
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(blockPos);
-        buf.writeNbt(blockEntity.getDraftData().toTag());
+        buf.writeNbt(blockEntity.getDrafts().toTag());
         NetworkManager.sendToPlayer(serverPlayer, HeraldryPackets.TABLE_DRAFT_SYNC, buf);
     }
 
@@ -125,6 +129,8 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         boolean changed = switch (action) {
             case SLOT_ACTION_INSERT -> insertOneFromInventory(serverPlayer, slot);
             case SLOT_ACTION_EXTRACT -> extractToInventory(serverPlayer, slot);
+            case SLOT_ACTION_INSERT_ALL -> insertAllFromInventory(serverPlayer, slot);
+            case SLOT_ACTION_EXTRACT_ONE -> extractOneToInventory(serverPlayer, slot);
             default -> false;
         };
 
@@ -201,6 +207,37 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         }
         serverPlayer.getInventory().setChanged();
         blockEntity.setChanged();
+        return true;
+    }
+
+    private boolean insertAllFromInventory(ServerPlayer serverPlayer, int slot) {
+        boolean changed = false;
+        while (insertOneFromInventory(serverPlayer, slot)) {
+            changed = true;
+        }
+        return changed;
+    }
+
+    private boolean extractOneToInventory(ServerPlayer serverPlayer, int slot) {
+        if (slot != HeraldryTableBlockEntity.PAPER_SLOT) {
+            return false;
+        }
+        ItemStack current = blockEntity.getItem(slot);
+        if (current.isEmpty()) {
+            return false;
+        }
+        ItemStack extracted = current.copy();
+        extracted.setCount(1);
+        current.shrink(1);
+        if (current.isEmpty()) {
+            blockEntity.setItem(slot, ItemStack.EMPTY);
+        } else {
+            blockEntity.setChanged();
+        }
+        if (!serverPlayer.getInventory().add(extracted)) {
+            serverPlayer.drop(extracted, false);
+        }
+        serverPlayer.getInventory().setChanged();
         return true;
     }
 }

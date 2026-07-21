@@ -43,7 +43,7 @@ public final class HeraldryPatternData {
     public static final int MESH_PIXEL_COUNT = MESH_ATLAS_WIDTH * MESH_ATLAS_HEIGHT;
 
     public static final int MAX_RUNS = 65_536;
-    public static final int MAX_ENCODED_BYTES = 768 * 1024;
+    public static final int MAX_ENCODED_BYTES = 384 * 1024;
     public static final int MAX_AUTHOR_LENGTH = 32;
 
     private static final int[] EMPTY = new int[0];

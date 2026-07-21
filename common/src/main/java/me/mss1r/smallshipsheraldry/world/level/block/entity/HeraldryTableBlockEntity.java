@@ -2,6 +2,7 @@ package me.mss1r.smallshipsheraldry.world.level.block.entity;
 
 import dev.architectury.registry.menu.ExtendedMenuProvider;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
+import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.registry.HeraldryBlockEntities;
 import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import me.mss1r.smallshipsheraldry.registry.HeraldryMenus;
@@ -31,9 +32,10 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     public static final int PAPER_SLOT = 0;
     public static final int RESULT_SLOT = 1;
     private static final String DRAFT_TAG = "Draft";
+    private static final String DRAFTS_TAG = "EditorDrafts";
 
     private final NonNullList<ItemStack> items = NonNullList.withSize(2, ItemStack.EMPTY);
-    private HeraldryPatternData draftData = HeraldryPatternData.blank();
+    private HeraldryTableDrafts drafts = HeraldryTableDrafts.blank();
 
     public HeraldryTableBlockEntity(BlockPos blockPos, BlockState blockState) {
         super(HeraldryBlockEntities.HERALDRY_TABLE.get(), blockPos, blockState);
@@ -117,6 +119,7 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     @Override
     public void saveExtraData(FriendlyByteBuf buf) {
         buf.writeBlockPos(getBlockPos());
+        buf.writeNbt(drafts.toTag());
     }
 
     public boolean exportPattern(Player player, HeraldryPatternData data) {
@@ -141,11 +144,20 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     }
 
     public HeraldryPatternData getDraftData() {
-        return draftData;
+        return drafts.get(drafts.activeShipType());
+    }
+
+    public HeraldryTableDrafts getDrafts() {
+        return drafts;
     }
 
     public void setDraftData(HeraldryPatternData draftData) {
-        this.draftData = draftData == null ? HeraldryPatternData.blank() : draftData;
+        this.drafts = drafts.withDraft(draftData);
+        setChanged();
+    }
+
+    public void setDrafts(HeraldryTableDrafts drafts) {
+        this.drafts = drafts == null ? HeraldryTableDrafts.blank() : drafts;
         setChanged();
     }
 
@@ -160,17 +172,19 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         ContainerHelper.saveAllItems(tag, items);
-        tag.put(DRAFT_TAG, draftData.toTag());
+        tag.put(DRAFTS_TAG, drafts.toTag());
     }
 
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
         ContainerHelper.loadAllItems(tag, items);
-        if (tag.contains(DRAFT_TAG, Tag.TAG_COMPOUND)) {
-            draftData = HeraldryPatternData.fromRootTag(tag.getCompound(DRAFT_TAG));
+        if (tag.contains(DRAFTS_TAG, Tag.TAG_COMPOUND)) {
+            drafts = HeraldryTableDrafts.fromTag(tag.getCompound(DRAFTS_TAG));
+        } else if (tag.contains(DRAFT_TAG, Tag.TAG_COMPOUND)) {
+            drafts = HeraldryTableDrafts.blank().withDraft(HeraldryPatternData.fromRootTag(tag.getCompound(DRAFT_TAG)));
         } else {
-            draftData = HeraldryPatternData.blank();
+            drafts = HeraldryTableDrafts.blank();
         }
     }
 }

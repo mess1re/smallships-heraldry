@@ -56,6 +56,24 @@ public final class HeraldryDraftTexture implements AutoCloseable {
         dirty = true;
     }
 
+    public void updateRegion(int[] source, int x, int y, int width, int height) {
+        if (closed || source.length < HeraldryPatternData.MESH_PIXEL_COUNT || width <= 0 || height <= 0) {
+            return;
+        }
+        int minX = Math.max(0, x);
+        int minY = Math.max(0, y);
+        int maxX = Math.min(HeraldryPatternData.MESH_ATLAS_WIDTH, x + width);
+        int maxY = Math.min(HeraldryPatternData.MESH_ATLAS_HEIGHT, y + height);
+        NativeImage pixels = pixels();
+        for (int localY = minY; localY < maxY; localY++) {
+            int row = localY * HeraldryPatternData.MESH_ATLAS_WIDTH;
+            for (int localX = minX; localX < maxX; localX++) {
+                pixels.setPixelRGBA(localX, localY, HeraldryTextureGenerator.argbToAbgr(source[row + localX]));
+            }
+        }
+        dirty = true;
+    }
+
     public void uploadIfDirty() {
         if (!closed && dirty) {
             dynamicTexture.upload();
