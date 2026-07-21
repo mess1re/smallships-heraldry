@@ -28,7 +28,6 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.lang.reflect.Field;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -327,68 +326,27 @@ public final class PaintableSailMesh {
         return Optional.of(cache.faces());
     }
 
-    public static boolean fillElementPixels(Ship ship, String elementId, int stage, int[] meshPixels, int color) {
-        if (ship == null || elementId == null || elementId.isBlank() || meshPixels == null) {
-            return false;
+    static List<Face> facesFor(Ship ship, int stage) {
+        if (ship == null) {
+            return List.of();
         }
-
-        ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
-        Definition definition = definition(shipType);
+        Definition definition = definition(ShipPreviewType.fromShip(ship));
         if (definition.isEmpty()) {
-            return false;
+            return List.of();
         }
+        return definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1));
+    }
 
-        int clampedStage = Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1);
-        boolean changed = false;
-        for (Face face : definition.facesForState(clampedStage)) {
-            if (!elementId.equals(face.elementId())) {
-                continue;
-            }
-            fillFacePixels(face, meshPixels, color);
-            changed = true;
-        }
-        return changed;
+    public static boolean fillElementPixels(Ship ship, String elementId, int stage, int[] meshPixels, int color) {
+        return SailMeshPainter.fillElementPixels(ship, elementId, stage, meshPixels, color);
     }
 
     public static boolean fillStagePixels(Ship ship, int stage, int[] meshPixels, int color) {
-        if (ship == null || meshPixels == null) {
-            return false;
-        }
-
-        ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
-        Definition definition = definition(shipType);
-        if (definition.isEmpty()) {
-            return false;
-        }
-
-        int clampedStage = Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1);
-        boolean changed = false;
-        for (Face face : definition.facesForState(clampedStage)) {
-            fillFacePixels(face, meshPixels, color);
-            changed = true;
-        }
-        return changed;
+        return SailMeshPainter.fillStagePixels(ship, stage, meshPixels, color);
     }
 
     public static boolean fillFacePixels(Ship ship, int faceIndex, int stage, int[] meshPixels, int color) {
-        if (ship == null || meshPixels == null) {
-            return false;
-        }
-
-        ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
-        Definition definition = definition(shipType);
-        if (definition.isEmpty()) {
-            return false;
-        }
-
-        int clampedStage = Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1);
-        for (Face face : definition.facesForState(clampedStage)) {
-            if (face.faceIndex() == faceIndex) {
-                fillFacePixels(face, meshPixels, color);
-                return true;
-            }
-        }
-        return false;
+        return SailMeshPainter.fillFacePixels(ship, faceIndex, stage, meshPixels, color);
     }
 
     public static boolean paintBrushPixels(
@@ -401,40 +359,7 @@ public final class PaintableSailMesh {
             boolean mirrorVertical,
             boolean mirrorHorizontal
     ) {
-        Face face = faceForHit(ship, hit, stage);
-        if (face == null || meshPixels == null) {
-            return false;
-        }
-
-        AtlasSlot slot = face.slot();
-        int localX = hit.pixelX() - slot.x();
-        int localY = hit.pixelY() - slot.y();
-        int clampedSize = Mth.clamp(size, 1, 8);
-        return paintBrushWithMirrors(face, localX, localY, meshPixels, color, clampedSize, mirrorVertical, mirrorHorizontal);
-    }
-
-    private static boolean paintBrushWithMirrors(
-            Face face,
-            int localX,
-            int localY,
-            int[] meshPixels,
-            int color,
-            int size,
-            boolean mirrorVertical,
-            boolean mirrorHorizontal
-    ) {
-        AtlasSlot slot = face.slot();
-        boolean changed = paintBrushAt(face, localX, localY, meshPixels, color, size);
-        if (mirrorVertical) {
-            changed |= paintBrushAt(face, slot.width() - 1 - localX, localY, meshPixels, color, size);
-        }
-        if (mirrorHorizontal) {
-            changed |= paintBrushAt(face, localX, slot.height() - 1 - localY, meshPixels, color, size);
-        }
-        if (mirrorVertical && mirrorHorizontal) {
-            changed |= paintBrushAt(face, slot.width() - 1 - localX, slot.height() - 1 - localY, meshPixels, color, size);
-        }
-        return changed;
+        return SailMeshPainter.paintBrushPixels(ship, hit, stage, meshPixels, color, size, mirrorVertical, mirrorHorizontal);
     }
 
     public static boolean paintLinePixels(
@@ -448,90 +373,11 @@ public final class PaintableSailMesh {
             boolean mirrorVertical,
             boolean mirrorHorizontal
     ) {
-        if (start == null || end == null || start.faceIndex() != end.faceIndex()) {
-            return paintBrushPixels(ship, end, stage, meshPixels, color, size, mirrorVertical, mirrorHorizontal);
-        }
-        Face face = faceForHit(ship, start, stage);
-        if (face == null || meshPixels == null) {
-            return false;
-        }
-
-        AtlasSlot slot = face.slot();
-        int x0 = start.pixelX() - slot.x();
-        int y0 = start.pixelY() - slot.y();
-        int x1 = end.pixelX() - slot.x();
-        int y1 = end.pixelY() - slot.y();
-        int dx = Math.abs(x1 - x0);
-        int stepX = x0 < x1 ? 1 : -1;
-        int dy = -Math.abs(y1 - y0);
-        int stepY = y0 < y1 ? 1 : -1;
-        int error = dx + dy;
-        int clampedSize = Mth.clamp(size, 1, 8);
-        boolean changed = false;
-        while (true) {
-            changed |= paintBrushWithMirrors(face, x0, y0, meshPixels, color, clampedSize, mirrorVertical, mirrorHorizontal);
-            if (x0 == x1 && y0 == y1) {
-                break;
-            }
-            int twiceError = error * 2;
-            if (twiceError >= dy) {
-                error += dy;
-                x0 += stepX;
-            }
-            if (twiceError <= dx) {
-                error += dx;
-                y0 += stepY;
-            }
-        }
-        return changed;
+        return SailMeshPainter.paintLinePixels(ship, start, end, stage, meshPixels, color, size, mirrorVertical, mirrorHorizontal);
     }
 
     public static boolean floodFillPixels(Ship ship, Hit hit, int stage, int[] meshPixels, int color) {
-        Face face = faceForHit(ship, hit, stage);
-        if (face == null || meshPixels == null) {
-            return false;
-        }
-
-        AtlasSlot slot = face.slot();
-        int startX = hit.pixelX() - slot.x();
-        int startY = hit.pixelY() - slot.y();
-        if (!isInsideFacePixel(face, startX, startY)) {
-            return false;
-        }
-        int source = meshPixels[hit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + hit.pixelX()];
-        if (source == color) {
-            return false;
-        }
-
-        boolean[] visited = new boolean[slot.width() * slot.height()];
-        ArrayDeque<Integer> pending = new ArrayDeque<>();
-        pending.add(startY * slot.width() + startX);
-        boolean changed = false;
-        while (!pending.isEmpty()) {
-            int packed = pending.removeFirst();
-            if (packed < 0 || packed >= visited.length || visited[packed]) {
-                continue;
-            }
-            visited[packed] = true;
-            int localX = packed % slot.width();
-            int localY = packed / slot.width();
-            if (!isInsideFacePixel(face, localX, localY)) {
-                continue;
-            }
-            int atlasX = slot.x() + localX;
-            int atlasY = slot.y() + localY;
-            int index = atlasY * HeraldryPatternData.MESH_ATLAS_WIDTH + atlasX;
-            if (meshPixels[index] != source) {
-                continue;
-            }
-            setMeshPixel(meshPixels, face, localX, localY, color);
-            changed = true;
-            if (localX > 0) pending.add(packed - 1);
-            if (localX + 1 < slot.width()) pending.add(packed + 1);
-            if (localY > 0) pending.add(packed - slot.width());
-            if (localY + 1 < slot.height()) pending.add(packed + slot.width());
-        }
-        return changed;
+        return SailMeshPainter.floodFillPixels(ship, hit, stage, meshPixels, color);
     }
 
     public static boolean replaceColorPixels(
@@ -543,34 +389,7 @@ public final class PaintableSailMesh {
             Set<String> selectedElements,
             Set<String> hiddenElements
     ) {
-        if (ship == null || meshPixels == null || source == color) {
-            return false;
-        }
-        Definition definition = definition(ShipPreviewType.fromShip(ship));
-        boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
-        boolean changed = false;
-        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
-            if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
-                continue;
-            }
-            if (restrictSelection && !selectedElements.contains(face.elementId())) {
-                continue;
-            }
-            AtlasSlot slot = face.slot();
-            for (int y = 0; y < slot.height(); y++) {
-                for (int x = 0; x < slot.width(); x++) {
-                    if (!isInsideFacePixel(face, x, y)) {
-                        continue;
-                    }
-                    int index = (slot.y() + y) * HeraldryPatternData.MESH_ATLAS_WIDTH + slot.x() + x;
-                    if (meshPixels[index] == source) {
-                        setMeshPixel(meshPixels, face, x, y, color);
-                        changed = true;
-                    }
-                }
-            }
-        }
-        return changed;
+        return SailMeshPainter.replaceColorPixels(ship, stage, meshPixels, source, color, selectedElements, hiddenElements);
     }
 
     public static boolean fillScopedPixels(
@@ -581,92 +400,9 @@ public final class PaintableSailMesh {
             Set<String> selectedElements,
             Set<String> hiddenElements
     ) {
-        if (ship == null || meshPixels == null) {
-            return false;
-        }
-        Definition definition = definition(ShipPreviewType.fromShip(ship));
-        boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
-        boolean changed = false;
-        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
-            if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
-                continue;
-            }
-            if (restrictSelection && !selectedElements.contains(face.elementId())) {
-                continue;
-            }
-            fillFacePixels(face, meshPixels, color);
-            changed = true;
-        }
-        return changed;
+        return SailMeshPainter.fillScopedPixels(ship, stage, meshPixels, color, selectedElements, hiddenElements);
     }
 
-    private static Face faceForHit(Ship ship, Hit hit, int stage) {
-        if (ship == null || hit == null) {
-            return null;
-        }
-        Definition definition = definition(ShipPreviewType.fromShip(ship));
-        for (Face face : definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1))) {
-            if (face.faceIndex() == hit.faceIndex()) {
-                return face;
-            }
-        }
-        return null;
-    }
-
-    private static boolean paintBrushAt(Face face, int centerX, int centerY, int[] meshPixels, int color, int size) {
-        int firstOffset = -(size / 2);
-        int lastOffset = firstOffset + size - 1;
-        boolean changed = false;
-        AtlasSlot slot = face.slot();
-        for (int offsetY = firstOffset; offsetY <= lastOffset; offsetY++) {
-            for (int offsetX = firstOffset; offsetX <= lastOffset; offsetX++) {
-                int localX = centerX + offsetX;
-                int localY = centerY + offsetY;
-                if (!isInsideFacePixel(face, localX, localY)) {
-                    continue;
-                }
-                int index = (slot.y() + localY) * HeraldryPatternData.MESH_ATLAS_WIDTH + slot.x() + localX;
-                if (meshPixels[index] != color) {
-                    setMeshPixel(meshPixels, face, localX, localY, color);
-                    changed = true;
-                }
-            }
-        }
-        return changed;
-    }
-
-    private static boolean isInsideFacePixel(Face face, int localX, int localY) {
-        AtlasSlot slot = face.slot();
-        if (localX < 0 || localX >= slot.width() || localY < 0 || localY >= slot.height()) {
-            return false;
-        }
-        Vertex[] vertices = face.vertices();
-        float x = localX + 0.5F;
-        float y = localY + 0.5F;
-        return isInsideTriangle(vertices[0], vertices[1], vertices[2], slot, x, y)
-                || isInsideTriangle(vertices[0], vertices[2], vertices[3], slot, x, y);
-    }
-
-    private static boolean isInsideTriangle(Vertex first, Vertex second, Vertex third, AtlasSlot slot, float x, float y) {
-        float ax = first.localU() * slot.width();
-        float ay = first.localV() * slot.height();
-        float bx = second.localU() * slot.width();
-        float by = second.localV() * slot.height();
-        float cx = third.localU() * slot.width();
-        float cy = third.localV() * slot.height();
-        float denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
-        if (Math.abs(denominator) < 0.00001F) {
-            float minX = Math.min(ax, Math.min(bx, cx));
-            float maxX = Math.max(ax, Math.max(bx, cx));
-            float minY = Math.min(ay, Math.min(by, cy));
-            float maxY = Math.max(ay, Math.max(by, cy));
-            return x >= minX && x <= maxX && y >= minY && y <= maxY;
-        }
-        float weightA = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denominator;
-        float weightB = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denominator;
-        float weightC = 1.0F - weightA - weightB;
-        return weightA >= -0.001F && weightB >= -0.001F && weightC >= -0.001F;
-    }
 
     private static List<Face> editorFaces(
             Ship ship,
@@ -1185,89 +921,6 @@ public final class PaintableSailMesh {
                 slot.x(), slot.y(), slot.width(), slot.height());
     }
 
-    private static void fillFacePixels(Face face, int[] meshPixels, int color) {
-        AtlasSlot slot = face.slot();
-        PixelVertex[] vertices = new PixelVertex[4];
-        for (int i = 0; i < face.vertices().length; i++) {
-            Vertex vertex = face.vertices()[i];
-            vertices[i] = new PixelVertex(
-                    vertex.localU() * slot.width(),
-                    vertex.localV() * slot.height()
-            );
-        }
-        fillUvTriangle(face, vertices[0], vertices[1], vertices[2], meshPixels, color);
-        fillUvTriangle(face, vertices[0], vertices[2], vertices[3], meshPixels, color);
-    }
-
-    private static void fillUvTriangle(Face face, PixelVertex a, PixelVertex b, PixelVertex c, int[] meshPixels, int color) {
-        AtlasSlot slot = face.slot();
-        int minX = clampTilePixel(Mth.floor(Math.min(a.x(), Math.min(b.x(), c.x()))), slot.width());
-        int minY = clampTilePixel(Mth.floor(Math.min(a.y(), Math.min(b.y(), c.y()))), slot.height());
-        int maxX = clampTilePixel(Mth.ceil(Math.max(a.x(), Math.max(b.x(), c.x())) - 1), slot.width());
-        int maxY = clampTilePixel(Mth.ceil(Math.max(a.y(), Math.max(b.y(), c.y())) - 1), slot.height());
-        float denominator = (b.y() - c.y()) * (a.x() - c.x()) + (c.x() - b.x()) * (a.y() - c.y());
-        if (Math.abs(denominator) < 0.00001F) {
-            fillUvBounds(face, minX, minY, maxX, maxY, meshPixels, color);
-            return;
-        }
-
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                float px = x + 0.5F;
-                float py = y + 0.5F;
-                float weightA = ((b.y() - c.y()) * (px - c.x()) + (c.x() - b.x()) * (py - c.y())) / denominator;
-                float weightB = ((c.y() - a.y()) * (px - c.x()) + (a.x() - c.x()) * (py - c.y())) / denominator;
-                float weightC = 1.0F - weightA - weightB;
-                if (weightA >= -0.001F && weightB >= -0.001F && weightC >= -0.001F) {
-                    setMeshPixel(meshPixels, face, x, y, color);
-                }
-            }
-        }
-    }
-
-    private static void fillUvBounds(Face face, int minX, int minY, int maxX, int maxY, int[] meshPixels, int color) {
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                setMeshPixel(meshPixels, face, x, y, color);
-            }
-        }
-    }
-
-    private static void setMeshPixel(int[] meshPixels, int faceIndex, int x, int y, int color) {
-        setMeshPixel(meshPixels, null, faceIndex, x, y, color);
-    }
-
-    private static void setMeshPixel(int[] meshPixels, Face face, int x, int y, int color) {
-        setMeshPixel(meshPixels, face.slot(), face.faceIndex(), x, y, color);
-    }
-
-    private static void setMeshPixel(int[] meshPixels, AtlasSlot slot, int faceIndex, int x, int y, int color) {
-        AtlasSlot resolvedSlot = slot == null ? fixedSlot(faceIndex) : slot;
-        int localX = clampTilePixel(x, resolvedSlot.width());
-        int localY = clampTilePixel(y, resolvedSlot.height());
-        int atlasX = resolvedSlot.x() + localX;
-        int atlasY = resolvedSlot.y() + localY;
-        int minX = localX == 0 ? -TILE_PADDING : 0;
-        int maxX = localX == resolvedSlot.width() - 1 ? TILE_PADDING : 0;
-        int minY = localY == 0 ? -TILE_PADDING : 0;
-        int maxY = localY == resolvedSlot.height() - 1 ? TILE_PADDING : 0;
-        for (int dy = minY; dy <= maxY; dy++) {
-            for (int dx = minX; dx <= maxX; dx++) {
-                setAtlasPixel(meshPixels, atlasX + dx, atlasY + dy, color);
-            }
-        }
-    }
-
-    private static void setAtlasPixel(int[] meshPixels, int x, int y, int color) {
-        if (x < 0 || x >= HeraldryPatternData.MESH_ATLAS_WIDTH || y < 0 || y >= HeraldryPatternData.MESH_ATLAS_HEIGHT) {
-            return;
-        }
-
-        int index = y * HeraldryPatternData.MESH_ATLAS_WIDTH + x;
-        if (index >= 0 && index < meshPixels.length) {
-            meshPixels[index] = color;
-        }
-    }
 
     private static float averageDepth(Face face) {
         float depth = 0.0F;
@@ -1277,32 +930,8 @@ public final class PaintableSailMesh {
         return depth / face.vertices().length;
     }
 
-    private static int clampMeshTilePixel(int value) {
-        return Math.max(0, Math.min(HeraldryPatternData.MESH_FACE_SIZE - 1, value));
-    }
-
     private static int clampTilePixel(int value, int size) {
         return Math.max(0, Math.min(Math.max(1, size) - 1, value));
-    }
-
-    private static int meshTileX(int faceIndex) {
-        return (faceIndex % HeraldryPatternData.MESH_ATLAS_COLUMNS) * HeraldryPatternData.MESH_FACE_SIZE;
-    }
-
-    private static int meshTileY(int faceIndex) {
-        return (faceIndex / HeraldryPatternData.MESH_ATLAS_COLUMNS) * HeraldryPatternData.MESH_FACE_SIZE;
-    }
-
-    private static AtlasSlot fixedSlot(int faceIndex) {
-        return new AtlasSlot(faceIndex, meshTileX(faceIndex), meshTileY(faceIndex), HeraldryPatternData.MESH_FACE_SIZE, HeraldryPatternData.MESH_FACE_SIZE);
-    }
-
-    private static int clampTextureX(int value) {
-        return Math.max(0, Math.min(HeraldryPatternData.WIDTH - 1, value));
-    }
-
-    private static int clampTextureY(int value) {
-        return Math.max(0, Math.min(HeraldryPatternData.HEIGHT - 1, value));
     }
 
     private static Definition definition(ShipPreviewType shipType) {
@@ -1745,9 +1374,6 @@ public final class PaintableSailMesh {
     private record ProjectedVertex(float x, float y, float depth, float u, float v) {
     }
 
-    private record PixelVertex(float x, float y) {
-    }
-
     private enum EdgeSide {
         TOP,
         BOTTOM,
@@ -1788,7 +1414,7 @@ public final class PaintableSailMesh {
     private record GridCorners(Vertex topLeft, Vertex topRight, Vertex bottomRight, Vertex bottomLeft) {
     }
 
-    private record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
+    record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
     }
 
     private record RawFace(String key, int state, String elementId, Vertex[] vertices, Vector3f normal) {
@@ -1797,7 +1423,7 @@ public final class PaintableSailMesh {
         }
     }
 
-    private record Face(int faceIndex, int state, String elementId, Vertex[] vertices, Vector3f normal, AtlasSlot slot) {
+    record Face(int faceIndex, int state, String elementId, Vertex[] vertices, Vector3f normal, AtlasSlot slot) {
         private void addTo(Bounds bounds) {
             for (Vertex vertex : vertices) {
                 bounds.include(vertex.x(), vertex.y(), vertex.z());
@@ -1808,7 +1434,7 @@ public final class PaintableSailMesh {
     private record EditorPickCache(int shipIdentity, int state, List<Face> faces) {
     }
 
-    private record AtlasSlot(int index, int x, int y, int width, int height) {
+    record AtlasSlot(int index, int x, int y, int width, int height) {
     }
 
     private record TileSize(int width, int height) {
