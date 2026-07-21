@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
 
 /** An edit box whose text follows the paper UI instead of using Minecraft's forced shadow. */
 final class PaperEditBox extends EditBox {
-    private static final int ALMOST_TRANSPARENT = 0x01FFFFFF;
+    private static final int ALMOST_TRANSPARENT = 0x04FFFFFF;
 
     private final Font font;
     private int paperTextColor = HeraldryGuiTheme.INK;
@@ -36,8 +36,8 @@ final class PaperEditBox extends EditBox {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         int color = active ? paperTextColor : paperTextColorUneditable;
         graphics.drawString(font, getValue(), getX(), getY() + (height - 8) / 2, color, false);
-        // The nearly transparent vanilla text keeps its caret and selection behavior,
-        // while the visible text above is rendered once and without a shadow.
+        // Minecraft promotes alpha values below 4 to fully opaque. Alpha 4 keeps the
+        // vanilla caret and selection behavior without drawing a second text layer.
         super.renderWidget(graphics, mouseX, mouseY, partialTick);
     }
 }

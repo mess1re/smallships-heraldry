@@ -56,12 +56,18 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     void init(int leftPos, int topPos) {
         this.leftPos = leftPos;
         this.topPos = topPos;
+        String previousName = nameInput == null ? null : nameInput.getValue();
+        boolean wasFocused = nameInput != null && nameInput.isFocused();
         nameInput = new PaperEditBox(font, leftPos + X + 13, topPos + Y + 24, 148, 14,
                 Component.translatable("smallshipsheraldry.library.name"));
         nameInput.setMaxLength(HeraldryPatternLibrary.MAX_NAME_LENGTH);
         nameInput.setBordered(false);
         nameInput.setTextColor(HeraldryGuiTheme.INK);
         nameInput.setTextColorUneditable(HeraldryGuiTheme.MUTED_INK);
+        if (previousName != null) {
+            nameInput.setValue(previousName);
+            nameInput.setFocused(wasFocused);
+        }
         nameInput.setResponder(value -> clearConfirmation());
     }
 
