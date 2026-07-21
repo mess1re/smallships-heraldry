@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "me.mss1r.smallshipsheraldry.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "ContainerShipInteractionMixin",
+    "ShipInteractionMixin",
+    "ShipMixin"
+  ],
+  "client": [
+    "client.ShipRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [
+    "${mod_author}"
+  ],
+  "license": "${mod_license}",
+  "icon": "smallshipsheraldry.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "me.mss1r.smallshipsheraldry.fabric.SmallShipsHeraldryFabric"
+    ],
+    "client": [
+      "me.mss1r.smallshipsheraldry.fabric.SmallShipsHeraldryFabricClient"
+    ]
+  },
+  "mixins": [
+    "smallshipsheraldry-common.mixins.json"
+  ],
+  "accessWidener": "smallshipsheraldry.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.14.21 <1",
+    "fabric-api": "*",
+    "architectury": ">=9.0.8 <10",
+    "forgeconfigapiport": ">=8.0.3 <9",
+    "minecraft": "1.20.1",
+    "smallships": "2.0.0-b1.4"
+  }
+}
