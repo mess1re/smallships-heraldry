@@ -806,19 +806,18 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         int x = leftPos + 20;
         int y = topPos + 28;
         int width = imageWidth - 40;
-        int height = 204;
+        int height = 226;
         HeraldryGuiTheme.drawWindow(guiGraphics, x - 2, y - 2, width + 4, height + 4);
         guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.help.title"), x + 8, y + 8, HeraldryGuiTheme.INK, false);
 
         Component[] lines = {
-                Component.translatable("smallshipsheraldry.help.print"),
-                Component.translatable("smallshipsheraldry.help.ship"),
+                Component.translatable("smallshipsheraldry.help.layout"),
                 Component.translatable("smallshipsheraldry.help.paint"),
-                Component.translatable("smallshipsheraldry.help.elements"),
-                Component.translatable("smallshipsheraldry.help.tools"),
-                Component.translatable("smallshipsheraldry.help.colors"),
-                Component.translatable("smallshipsheraldry.help.opacity"),
-                Component.translatable("smallshipsheraldry.help.history")
+                Component.translatable("smallshipsheraldry.help.parts"),
+                Component.translatable("smallshipsheraldry.help.view"),
+                Component.translatable("smallshipsheraldry.help.navigation"),
+                Component.translatable("smallshipsheraldry.help.library"),
+                Component.translatable("smallshipsheraldry.help.workflow")
         };
         int lineY = y + 24;
         for (Component line : lines) {
