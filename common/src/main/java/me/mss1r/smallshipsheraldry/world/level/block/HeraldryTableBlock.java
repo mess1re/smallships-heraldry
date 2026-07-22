@@ -29,7 +29,7 @@ import org.jetbrains.annotations.Nullable;
 
 public class HeraldryTableBlock extends BaseEntityBlock implements EntityBlock {
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
-    private static final VoxelShape SHAPE = Block.box(0.0, 0.0, 0.0, 16.0, 13.0, 16.0);
+    private static final VoxelShape SHAPE = Block.box(-1.6, 0.0, -1.6, 17.6, 15.6, 17.6);
 
     public HeraldryTableBlock(Properties properties) {
         super(properties);
