@@ -1,0 +1,37 @@
+{
+  "parent": "minecraft:adventure/root",
+  "display": {
+    "icon": {
+      "item": "smallshipsheraldry:heraldry_table"
+    },
+    "title": {
+      "translate": "advancements.smallshipsheraldry.prepare_heraldry.title"
+    },
+    "description": {
+      "translate": "advancements.smallshipsheraldry.prepare_heraldry.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "has_table": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "smallshipsheraldry:heraldry_table"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_table"
+    ]
+  ]
+}

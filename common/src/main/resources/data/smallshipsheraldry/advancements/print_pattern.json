@@ -1,0 +1,37 @@
+{
+  "parent": "smallshipsheraldry:prepare_heraldry",
+  "display": {
+    "icon": {
+      "item": "smallshipsheraldry:heraldry_pattern"
+    },
+    "title": {
+      "translate": "advancements.smallshipsheraldry.print_pattern.title"
+    },
+    "description": {
+      "translate": "advancements.smallshipsheraldry.print_pattern.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "has_pattern": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "smallshipsheraldry:heraldry_pattern"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_pattern"
+    ]
+  ]
+}

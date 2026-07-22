@@ -109,5 +109,9 @@
   "smallshipsheraldry.part.lateen_sail": "Косой парус",
   "smallshipsheraldry.part.sail_number": "Парус %s",
   "smallshipsheraldry.part.rope_number": "Канат %s",
-  "smallshipsheraldry.part.other_number": "Деталь %s"
+  "smallshipsheraldry.part.other_number": "Деталь %s",
+  "advancements.smallshipsheraldry.prepare_heraldry.title": "Парусная мастерская",
+  "advancements.smallshipsheraldry.prepare_heraldry.description": "Создайте геральдический стол",
+  "advancements.smallshipsheraldry.print_pattern.title": "Под своим знаком",
+  "advancements.smallshipsheraldry.print_pattern.description": "Напечатайте собственный узор для паруса"
 }

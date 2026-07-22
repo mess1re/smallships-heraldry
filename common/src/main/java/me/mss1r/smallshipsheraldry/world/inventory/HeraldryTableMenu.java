@@ -11,6 +11,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -96,6 +98,14 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
 
         HeraldryPatternData data = HeraldryPatternData.tryFromRootTag(patternTag).orElse(null);
         if (data != null && blockEntity.exportPattern(serverPlayer, data)) {
+            serverPlayer.level().playSound(
+                    null,
+                    blockPos,
+                    SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT,
+                    SoundSource.BLOCKS,
+                    1.0F,
+                    1.0F
+            );
             broadcastChanges();
         }
     }

@@ -109,5 +109,9 @@
   "smallshipsheraldry.part.lateen_sail": "Lateen Sail",
   "smallshipsheraldry.part.sail_number": "Sail %s",
   "smallshipsheraldry.part.rope_number": "Rope %s",
-  "smallshipsheraldry.part.other_number": "Part %s"
+  "smallshipsheraldry.part.other_number": "Part %s",
+  "advancements.smallshipsheraldry.prepare_heraldry.title": "Sailmaker's Workshop",
+  "advancements.smallshipsheraldry.prepare_heraldry.description": "Craft a Heraldry Table",
+  "advancements.smallshipsheraldry.print_pattern.title": "Make Your Mark",
+  "advancements.smallshipsheraldry.print_pattern.description": "Print a custom sail pattern"
 }
