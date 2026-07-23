@@ -1,11 +1,43 @@
 package me.mss1r.smallshipsheraldry.client.render;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 final class SailMeshPicker {
+    private static final int CELL_SIZE = 16;
+
     private SailMeshPicker() {
+    }
+
+    static Index index(List<PaintableSailMesh.Face> faces) {
+        Map<Long, List<PaintableSailMesh.Face>> cells = new HashMap<>();
+        for (PaintableSailMesh.Face face : faces) {
+            PaintableSailMesh.Vertex[] vertices = face.vertices();
+            float minX = Float.MAX_VALUE;
+            float minY = Float.MAX_VALUE;
+            float maxX = -Float.MAX_VALUE;
+            float maxY = -Float.MAX_VALUE;
+            for (PaintableSailMesh.Vertex vertex : vertices) {
+                minX = Math.min(minX, vertex.x());
+                minY = Math.min(minY, vertex.y());
+                maxX = Math.max(maxX, vertex.x());
+                maxY = Math.max(maxY, vertex.y());
+            }
+            int minCellX = cell(minX);
+            int minCellY = cell(minY);
+            int maxCellX = cell(maxX);
+            int maxCellY = cell(maxY);
+            for (int cellY = minCellY; cellY <= maxCellY; cellY++) {
+                for (int cellX = minCellX; cellX <= maxCellX; cellX++) {
+                    cells.computeIfAbsent(key(cellX, cellY), ignored -> new ArrayList<>()).add(face);
+                }
+            }
+        }
+        return new Index(List.copyOf(faces), cells);
     }
 
     static Optional<PaintableSailMesh.Hit> pick(
@@ -14,18 +46,22 @@ final class SailMeshPicker {
             double mouseY,
             Set<String> hiddenElements
     ) {
+        return pick(index(faces), mouseX, mouseY, hiddenElements);
+    }
+
+    static Optional<PaintableSailMesh.Hit> pick(
+            Index index,
+            double mouseX,
+            double mouseY,
+            Set<String> hiddenElements
+    ) {
         PaintableSailMesh.Hit bestHit = null;
         float bestDepth = -Float.MAX_VALUE;
-        for (PaintableSailMesh.Face face : faces) {
+        for (PaintableSailMesh.Face face : index.facesAt(mouseX, mouseY)) {
             if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
                 continue;
             }
-            ProjectedVertex[] projected = new ProjectedVertex[4];
-            for (int index = 0; index < projected.length; index++) {
-                PaintableSailMesh.Vertex vertex = face.vertices()[index];
-                projected[index] = new ProjectedVertex(vertex.x(), vertex.y(), vertex.z(), vertex.localU(), vertex.localV());
-            }
-            PaintableSailMesh.Hit hit = hitFace(face, projected, mouseX, mouseY);
+            PaintableSailMesh.Hit hit = hitFace(face, mouseX, mouseY);
             if (hit != null) {
                 float depth = averageDepth(face);
                 if (depth > bestDepth) {
@@ -39,19 +75,19 @@ final class SailMeshPicker {
 
     private static PaintableSailMesh.Hit hitFace(
             PaintableSailMesh.Face face,
-            ProjectedVertex[] vertices,
             double mouseX,
             double mouseY
     ) {
+        PaintableSailMesh.Vertex[] vertices = face.vertices();
         PaintableSailMesh.Hit hit = hitTriangle(face, vertices[0], vertices[1], vertices[2], mouseX, mouseY);
         return hit != null ? hit : hitTriangle(face, vertices[0], vertices[2], vertices[3], mouseX, mouseY);
     }
 
     private static PaintableSailMesh.Hit hitTriangle(
             PaintableSailMesh.Face face,
-            ProjectedVertex a,
-            ProjectedVertex b,
-            ProjectedVertex c,
+            PaintableSailMesh.Vertex a,
+            PaintableSailMesh.Vertex b,
+            PaintableSailMesh.Vertex c,
             double mouseX,
             double mouseY
     ) {
@@ -68,8 +104,8 @@ final class SailMeshPicker {
             return null;
         }
 
-        float localU = weightA * a.u() + weightB * b.u() + weightC * c.u();
-        float localV = weightA * a.v() + weightB * b.v() + weightC * c.v();
+        float localU = weightA * a.localU() + weightB * b.localU() + weightC * c.localU();
+        float localV = weightA * a.localV() + weightB * b.localV() + weightC * c.localV();
         PaintableSailMesh.AtlasSlot slot = face.slot();
         int localPixelX = clampTilePixel((int) Math.floor(localU * slot.width()), slot.width());
         int localPixelY = clampTilePixel((int) Math.floor(localV * slot.height()), slot.height());
@@ -81,17 +117,41 @@ final class SailMeshPicker {
     }
 
     private static float averageDepth(PaintableSailMesh.Face face) {
-        float depth = 0.0F;
-        for (PaintableSailMesh.Vertex vertex : face.vertices()) {
-            depth += vertex.z();
-        }
-        return depth / face.vertices().length;
+        PaintableSailMesh.Vertex[] vertices = face.vertices();
+        return (vertices[0].z() + vertices[1].z() + vertices[2].z() + vertices[3].z()) * 0.25F;
     }
 
     private static int clampTilePixel(int value, int size) {
         return Math.max(0, Math.min(Math.max(1, size) - 1, value));
     }
 
-    private record ProjectedVertex(float x, float y, float depth, float u, float v) {
+    private static int cell(double coordinate) {
+        return (int) Math.floor(coordinate / CELL_SIZE);
+    }
+
+    private static long key(int cellX, int cellY) {
+        return ((long) cellX << 32) ^ (cellY & 0xFFFFFFFFL);
+    }
+
+    static final class Index {
+        private final List<PaintableSailMesh.Face> faces;
+        private final Map<Long, List<PaintableSailMesh.Face>> cells;
+
+        private Index(List<PaintableSailMesh.Face> faces, Map<Long, List<PaintableSailMesh.Face>> cells) {
+            this.faces = faces;
+            this.cells = cells;
+        }
+
+        List<PaintableSailMesh.Face> faces() {
+            return faces;
+        }
+
+        int candidateCountAt(double x, double y) {
+            return facesAt(x, y).size();
+        }
+
+        private List<PaintableSailMesh.Face> facesAt(double x, double y) {
+            return cells.getOrDefault(key(cell(x), cell(y)), List.of());
+        }
     }
 }

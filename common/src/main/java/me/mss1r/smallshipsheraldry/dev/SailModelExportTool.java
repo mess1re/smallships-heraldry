@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -63,7 +64,7 @@ public final class SailModelExportTool {
                 continue;
             }
 
-            Export export = new Export();
+            Export export = new Export(ship);
             collect(root, new PoseStack(), "", export);
             Files.writeString(outputDir.resolve(ship + "_sails.obj"), export.toObj(), StandardCharsets.UTF_8);
             Files.writeString(outputDir.resolve(ship + "_sails.bbmodel"), GSON.toJson(export.toBlockbenchModel(ship)), StandardCharsets.UTF_8);
@@ -76,6 +77,12 @@ public final class SailModelExportTool {
                 item.addProperty("note", defaultPaintable(element.getKey()) ? "review: cloth/rope candidate" : "review: hardware/rigging candidate");
                 item.addProperty("cubeCount", element.getValue().cubeCount);
                 item.addProperty("faceCount", element.getValue().faceCount);
+                item.addProperty("stage", element.getValue().stage);
+                JsonArray cubes = new JsonArray();
+                for (String cube : element.getValue().cubes) {
+                    cubes.add(cube);
+                }
+                item.add("cubes", cubes);
                 elements.add(item);
             }
             JsonObject shipObject = new JsonObject();
@@ -95,7 +102,7 @@ public final class SailModelExportTool {
         List<ModelPart.Cube> cubes = cubes(part);
         for (int cubeIndex = 0; cubeIndex < cubes.size(); cubeIndex++) {
             String objectName = sanitizeObjName(elementId + "__cube_" + cubeIndex);
-            export.beginObject(objectName, elementId);
+            export.beginObject(objectName, elementId, cubeIndex);
             cubes.get(cubeIndex).compile(
                     poseStack.last(),
                     new ObjCollector(export),
@@ -129,6 +136,47 @@ public final class SailModelExportTool {
 
     private static String sanitizeObjName(String value) {
         return value.replace('/', '_').replace(' ', '_');
+    }
+
+    private static int stageOf(String elementId) {
+        String[] parts = elementId.split("/");
+        for (String part : parts) {
+            if (part.length() == 6
+                    && part.startsWith("Sail_")
+                    && part.charAt(5) >= '0'
+                    && part.charAt(5) <= '4') {
+                return part.charAt(5) - '0';
+            }
+        }
+        return -1;
+    }
+
+    private static List<String> reviewGroupPath(String elementId) {
+        String[] parts = elementId.split("/");
+        int stage = stageOf(elementId);
+        List<String> result = new ArrayList<>();
+        if (stage < 0) {
+            result.add("Shared / outside stages");
+            for (String part : parts) {
+                if (!part.isBlank() && !"root".equals(part)) {
+                    result.add(part);
+                }
+            }
+            return result;
+        }
+
+        result.add("Stage " + stage + " (editor stage " + (stage + 1) + ")");
+        boolean afterStage = false;
+        for (String part : parts) {
+            if (!afterStage) {
+                afterStage = part.equals("Sail_" + stage);
+                continue;
+            }
+            if (!part.isBlank()) {
+                result.add(part);
+            }
+        }
+        return result;
     }
 
     private static ModelPart rootPart(SailModel sailModel) {
@@ -180,24 +228,29 @@ public final class SailModelExportTool {
     }
 
     private static final class Export {
+        private final String ship;
         private final StringBuilder obj = new StringBuilder();
         private final Map<String, ElementStats> elements = new LinkedHashMap<>();
         private final List<Integer> currentFace = new ArrayList<>(4);
         private final JsonArray blockbenchElements = new JsonArray();
-        private final JsonArray outliner = new JsonArray();
+        private final Map<String, GroupNode> topLevelGroups = new LinkedHashMap<>();
         private String currentElement = "root";
         private MeshElement currentMesh;
 
-        private Export() {
+        private Export(String ship) {
+            this.ship = ship;
             obj.append("# Small Ships Heraldry sail export for Blockbench review\n");
             obj.append("# Import this OBJ into Blockbench, then edit sail_paint_manifest.json paintable flags.\n");
         }
 
-        private void beginObject(String name, String elementId) {
+        private void beginObject(String name, String elementId, int cubeIndex) {
             currentElement = elementId;
-            elements.computeIfAbsent(elementId, ignored -> new ElementStats()).cubeCount++;
+            ElementStats stats = elements.computeIfAbsent(elementId, ignored -> new ElementStats(stageOf(elementId)));
+            stats.cubeCount++;
+            String cubeName = elementId + "/cube_" + cubeIndex;
+            stats.cubes.add(cubeName);
             obj.append("\no ").append(name).append('\n');
-            currentMesh = new MeshElement(name);
+            currentMesh = new MeshElement(ship, cubeName);
         }
 
         private void vertex(float x, float y, float z) {
@@ -215,7 +268,7 @@ public final class SailModelExportTool {
                     obj.append(currentFace.get(i));
                 }
                 obj.append('\n');
-                elements.computeIfAbsent(currentElement, ignored -> new ElementStats()).faceCount++;
+                elements.computeIfAbsent(currentElement, ignored -> new ElementStats(stageOf(currentElement))).faceCount++;
                 currentFace.clear();
             }
         }
@@ -226,7 +279,7 @@ public final class SailModelExportTool {
             currentFace.clear();
             if (currentMesh != null) {
                 blockbenchElements.add(currentMesh.toJson());
-                outliner.add(currentMesh.uuid);
+                groupFor(currentElement).children.add(currentMesh.uuid);
                 currentMesh = null;
             }
         }
@@ -250,15 +303,97 @@ public final class SailModelExportTool {
             root.add("resolution", resolution);
             root.add("elements", blockbenchElements);
             root.add("groups", new JsonArray());
+            JsonArray outliner = new JsonArray();
+            topLevelGroups.values().stream()
+                    .sorted(Comparator.comparingInt(GroupNode::displayOrder))
+                    .forEach(group -> outliner.add(group.toJson()));
             root.add("outliner", outliner);
             root.add("textures", new JsonArray());
             return root;
         }
+
+        private GroupNode groupFor(String elementId) {
+            List<String> path = reviewGroupPath(elementId);
+            Map<String, GroupNode> siblings = topLevelGroups;
+            GroupNode current = null;
+            StringBuilder stablePath = new StringBuilder(ship);
+            for (String part : path) {
+                stablePath.append('/').append(part);
+                GroupNode parent = current;
+                current = siblings.computeIfAbsent(part, ignored -> new GroupNode(part, stablePath.toString()));
+                siblings = current.groups;
+                if (parent != null && !parent.children.contains(current)) {
+                    parent.children.add(current);
+                }
+            }
+            return current;
+        }
     }
 
     private static final class ElementStats {
+        private final int stage;
+        private final List<String> cubes = new ArrayList<>();
         private int cubeCount;
         private int faceCount;
+
+        private ElementStats(int stage) {
+            this.stage = stage;
+        }
+    }
+
+    private static final class GroupNode {
+        private final String name;
+        private final String uuid;
+        private final Map<String, GroupNode> groups = new LinkedHashMap<>();
+        private final List<Object> children = new ArrayList<>();
+
+        private GroupNode(String name, String stablePath) {
+            this.name = name;
+            this.uuid = UUID.nameUUIDFromBytes(
+                    ("smallshipsheraldry:group:" + stablePath).getBytes(StandardCharsets.UTF_8)
+            ).toString();
+        }
+
+        private JsonObject toJson() {
+            JsonObject group = new JsonObject();
+            group.addProperty("name", name);
+            group.add("origin", MeshElement.vector(0.0F, 0.0F, 0.0F));
+            group.addProperty("color", stageColor(name));
+            group.addProperty("uuid", uuid);
+            group.addProperty("export", true);
+            group.addProperty("isOpen", name.startsWith("Stage "));
+            group.addProperty("locked", false);
+            group.addProperty("visibility", !name.startsWith("Stage ") || name.startsWith("Stage 4 "));
+            group.addProperty("autouv", 0);
+            JsonArray jsonChildren = new JsonArray();
+            for (Object child : children) {
+                if (child instanceof GroupNode childGroup) {
+                    jsonChildren.add(childGroup.toJson());
+                } else if (child instanceof String childUuid) {
+                    jsonChildren.add(childUuid);
+                }
+            }
+            group.add("children", jsonChildren);
+            return group;
+        }
+
+        private int displayOrder() {
+            if (name.startsWith("Stage ") && name.length() >= 7) {
+                char stage = name.charAt(6);
+                if (stage >= '0' && stage <= '4') {
+                    return stage - '0';
+                }
+            }
+            return 10;
+        }
+
+        private static int stageColor(String name) {
+            if (!name.startsWith("Stage ") || name.length() < 7) {
+                return 0;
+            }
+            char stage = name.charAt(6);
+            return stage >= '0' && stage <= '4' ? stage - '0' : 0;
+        }
     }
 
     private static final class ObjCollector implements VertexConsumer {
@@ -342,9 +477,9 @@ public final class SailModelExportTool {
         private int vertexIndex;
         private int faceIndex;
 
-        private MeshElement(String name) {
+        private MeshElement(String ship, String name) {
             this.name = name;
-            this.uuid = UUID.nameUUIDFromBytes(("smallshipsheraldry:" + name).getBytes(StandardCharsets.UTF_8)).toString();
+            this.uuid = UUID.nameUUIDFromBytes(("smallshipsheraldry:" + ship + ':' + name).getBytes(StandardCharsets.UTF_8)).toString();
         }
 
         private void vertex(float x, float y, float z) {

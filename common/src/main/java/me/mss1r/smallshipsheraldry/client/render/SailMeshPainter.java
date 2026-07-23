@@ -15,7 +15,7 @@ final class SailMeshPainter {
     }
 
     static boolean fillElementPixels(Ship ship, String elementId, int stage, int[] pixels, int color) {
-        if (ship == null || elementId == null || elementId.isBlank() || pixels == null) {
+        if (ship == null || elementId == null || elementId.isBlank() || !validPixels(pixels)) {
             return false;
         }
         boolean changed = false;
@@ -29,7 +29,7 @@ final class SailMeshPainter {
     }
 
     static boolean fillStagePixels(Ship ship, int stage, int[] pixels, int color) {
-        if (ship == null || pixels == null) {
+        if (ship == null || !validPixels(pixels)) {
             return false;
         }
         boolean changed = false;
@@ -41,7 +41,7 @@ final class SailMeshPainter {
     }
 
     static boolean fillFacePixels(Ship ship, int faceIndex, int stage, int[] pixels, int color) {
-        if (ship == null || pixels == null) {
+        if (ship == null || !validPixels(pixels)) {
             return false;
         }
         for (PaintableSailMesh.Face face : PaintableSailMesh.facesFor(ship, stage)) {
@@ -64,7 +64,7 @@ final class SailMeshPainter {
             boolean mirrorHorizontal
     ) {
         PaintableSailMesh.Face face = faceForHit(ship, hit, stage);
-        if (face == null || pixels == null) {
+        if (face == null || !validPixels(pixels)) {
             return false;
         }
         PaintableSailMesh.AtlasSlot slot = face.slot();
@@ -88,7 +88,7 @@ final class SailMeshPainter {
             return paintBrushPixels(ship, end, stage, pixels, color, size, mirrorVertical, mirrorHorizontal);
         }
         PaintableSailMesh.Face face = faceForHit(ship, start, stage);
-        if (face == null || pixels == null) {
+        if (face == null || !validPixels(pixels)) {
             return false;
         }
         PaintableSailMesh.AtlasSlot slot = face.slot();
@@ -123,7 +123,7 @@ final class SailMeshPainter {
 
     static boolean floodFillPixels(Ship ship, PaintableSailMesh.Hit hit, int stage, int[] pixels, int color) {
         PaintableSailMesh.Face face = faceForHit(ship, hit, stage);
-        if (face == null || pixels == null) {
+        if (face == null || !validPixels(pixels)) {
             return false;
         }
         PaintableSailMesh.AtlasSlot slot = face.slot();
@@ -177,7 +177,7 @@ final class SailMeshPainter {
             Set<String> selectedElements,
             Set<String> hiddenElements
     ) {
-        if (ship == null || pixels == null || source == color) {
+        if (ship == null || !validPixels(pixels) || source == color) {
             return false;
         }
         boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
@@ -214,7 +214,7 @@ final class SailMeshPainter {
             Set<String> selectedElements,
             Set<String> hiddenElements
     ) {
-        if (ship == null || pixels == null) {
+        if (ship == null || !validPixels(pixels)) {
             return false;
         }
         boolean restrictSelection = selectedElements != null && !selectedElements.isEmpty();
@@ -236,12 +236,7 @@ final class SailMeshPainter {
         if (ship == null || hit == null) {
             return null;
         }
-        for (PaintableSailMesh.Face face : PaintableSailMesh.facesFor(ship, stage)) {
-            if (face.faceIndex() == hit.faceIndex()) {
-                return face;
-            }
-        }
-        return null;
+        return PaintableSailMesh.faceFor(ship, stage, hit.faceIndex());
     }
 
     private static boolean paintBrushWithMirrors(
@@ -414,6 +409,10 @@ final class SailMeshPainter {
         if (index >= 0 && index < pixels.length) {
             pixels[index] = color;
         }
+    }
+
+    private static boolean validPixels(int[] pixels) {
+        return pixels != null && pixels.length >= HeraldryPatternData.MESH_PIXEL_COUNT;
     }
 
     private static int clampPixel(int value, int size) {

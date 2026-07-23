@@ -6,6 +6,7 @@ import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -19,7 +20,7 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 
 public final class SailBannerTextureCache {
-    private static final int MAX_CACHED_TEXTURES = 32;
+    private static final int MAX_CACHED_TEXTURES = 8;
     private static final Map<ItemStack, StackPattern> STACK_PATTERN_CACHE = new WeakHashMap<>();
     private static final Map<String, ResourceLocation> TEXTURE_CACHE = new LinkedHashMap<>(16, 0.75F, true) {
         @Override
@@ -31,11 +32,13 @@ public final class SailBannerTextureCache {
             return true;
         }
     };
+    private static ClientLevel cachedLevel;
 
     private SailBannerTextureCache() {
     }
 
     public static ResourceLocation getTexture(Ship ship, ItemStack sailPattern) {
+        clearForLevelChange();
         HeraldryPatternData pattern = getPatternData(sailPattern);
         if (pattern == null || pattern.paintedPixelCount() == 0) {
             return null;
@@ -55,6 +58,7 @@ public final class SailBannerTextureCache {
     }
 
     public static HeraldryPatternData getPatternData(ItemStack sailPattern) {
+        clearForLevelChange();
         if (sailPattern == null || !sailPattern.is(HeraldryItems.HERALDRY_PATTERN.get())) {
             return null;
         }
@@ -81,6 +85,16 @@ public final class SailBannerTextureCache {
         }
         TEXTURE_CACHE.clear();
         STACK_PATTERN_CACHE.clear();
+    }
+
+    private static void clearForLevelChange() {
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel currentLevel = minecraft == null ? null : minecraft.level;
+        if (currentLevel == cachedLevel) {
+            return;
+        }
+        clear();
+        cachedLevel = currentLevel;
     }
 
     private static ResourceLocation createTexture(String cacheKey, HeraldryPatternData patternData) {

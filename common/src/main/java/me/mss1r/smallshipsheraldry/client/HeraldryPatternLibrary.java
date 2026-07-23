@@ -79,6 +79,11 @@ public final class HeraldryPatternLibrary {
         return readEntry(resolve(safeName));
     }
 
+    public static Optional<HeraldryPatternData> load(Entry entry) {
+        Path path = checkedEntryPath(entry);
+        return path == null ? Optional.empty() : readPattern(path, true);
+    }
+
     public static Result save(String name, HeraldryPatternData data, boolean overwrite) {
         String safeName = sanitizeName(name);
         if (safeName.isEmpty() || data == null) {
@@ -215,14 +220,13 @@ public final class HeraldryPatternLibrary {
         if (!isInsideLibrary(path) || !isLibraryFile(path)) {
             return Optional.empty();
         }
-        Optional<HeraldryPatternData> data = readPattern(path, true);
-        if (data.isEmpty()) {
-            return Optional.empty();
-        }
         try {
+            if (Files.size(path) > MAX_FILE_BYTES) {
+                return Optional.empty();
+            }
             String fileName = path.getFileName().toString();
             String name = fileName.substring(0, fileName.length() - EXTENSION.length());
-            return Optional.of(new Entry(name, path, data.get(), Files.getLastModifiedTime(path).toMillis()));
+            return Optional.of(new Entry(name, path, Files.getLastModifiedTime(path).toMillis()));
         } catch (IOException exception) {
             SmallShipsHeraldry.LOGGER.warn("Could not read local heraldry pattern metadata {}", path, exception);
             return Optional.empty();
@@ -310,7 +314,7 @@ public final class HeraldryPatternLibrary {
         }
     }
 
-    public record Entry(String name, Path path, HeraldryPatternData data, long modifiedMillis) {
+    public record Entry(String name, Path path, long modifiedMillis) {
     }
 
     public record ImportSummary(int imported, int duplicates, int invalid, String lastImportedName) {

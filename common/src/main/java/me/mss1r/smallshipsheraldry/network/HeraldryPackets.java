@@ -4,7 +4,6 @@ import dev.architectury.networking.NetworkManager;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.world.inventory.HeraldryTableMenu;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -21,10 +20,14 @@ public final class HeraldryPackets {
     public static void register() {
         NetworkManager.registerReceiver(NetworkManager.c2s(), EXPORT_PATTERN, (buf, context) -> {
             BlockPos blockPos = buf.readBlockPos();
-            CompoundTag patternTag = buf.readNbt();
+            int transferId = buf.readVarInt();
+            int chunkIndex = buf.readVarInt();
+            int chunkCount = buf.readVarInt();
+            int totalBytes = buf.readVarInt();
+            byte[] chunk = buf.readByteArray(HeraldryPatternTransfer.CHUNK_BYTES);
             context.queue(() -> {
                 if (context.getPlayer() instanceof ServerPlayer serverPlayer && serverPlayer.containerMenu instanceof HeraldryTableMenu menu) {
-                    menu.handleExportRequest(serverPlayer, blockPos, patternTag);
+                    menu.handleExportChunk(serverPlayer, blockPos, transferId, chunkIndex, chunkCount, totalBytes, chunk);
                 }
             });
         });
@@ -40,10 +43,14 @@ public final class HeraldryPackets {
         });
         NetworkManager.registerReceiver(NetworkManager.c2s(), TABLE_DRAFT_UPDATE, (buf, context) -> {
             BlockPos blockPos = buf.readBlockPos();
-            CompoundTag patternTag = buf.readNbt();
+            int transferId = buf.readVarInt();
+            int chunkIndex = buf.readVarInt();
+            int chunkCount = buf.readVarInt();
+            int totalBytes = buf.readVarInt();
+            byte[] chunk = buf.readByteArray(HeraldryPatternTransfer.CHUNK_BYTES);
             context.queue(() -> {
                 if (context.getPlayer() instanceof ServerPlayer serverPlayer && serverPlayer.containerMenu instanceof HeraldryTableMenu menu) {
-                    menu.handleDraftUpdate(serverPlayer, blockPos, patternTag);
+                    menu.handleDraftChunk(serverPlayer, blockPos, transferId, chunkIndex, chunkCount, totalBytes, chunk);
                 }
             });
         });

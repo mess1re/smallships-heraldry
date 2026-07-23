@@ -50,6 +50,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     private int topPos;
     private boolean visible;
     private Ship previewShip;
+    private HeraldryPatternData previewData;
     private HeraldryDraftTexture previewTexture;
     private int previewStage = 4;
     private float previewYaw = 180.0F;
@@ -72,6 +73,8 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     void init(int leftPos, int topPos) {
         this.leftPos = leftPos;
         this.topPos = topPos;
+        rotatingPreview = false;
+        panningPreview = false;
         String previousName = nameInput == null ? null : nameInput.getValue();
         boolean wasFocused = nameInput != null && nameInput.isFocused();
         nameInput = new PaperEditBox(font, leftPos + X + 13, topPos + Y + 24, 148, 14,
@@ -313,7 +316,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         graphics.flush();
         RenderSystem.disableDepthTest();
         Component details = Component.translatable("smallshipsheraldry.library.details",
-                selected.data().shipType().getDisplayName(), previewStage + 1);
+                previewData.shipType().getDisplayName(), previewStage + 1);
         drawControl(graphics, mouseX, mouseY, previewX, y + PREVIEW_CONTROLS_Y, 18, 17, Component.literal("<"));
         drawCentered(graphics, details, previewX + PREVIEW_WIDTH / 2, y + PREVIEW_CONTROLS_Y + 4);
         drawControl(graphics, mouseX, mouseY, previewX + PREVIEW_WIDTH - 18, y + PREVIEW_CONTROLS_Y, 18, 17, Component.literal(">"));
@@ -365,9 +368,19 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         if (entry == null) {
             return;
         }
-        HeraldryPatternData data = entry.data();
-        previewTexture = new HeraldryDraftTexture("library", data.toDenseMeshPixels());
-        previewShip = PreviewShipFactory.create(data.shipType(), data, previewStage);
+        HeraldryPatternData data = HeraldryPatternLibrary.load(entry).orElse(null);
+        if (data == null) {
+            showMessage("smallshipsheraldry.message.invalid_pattern");
+            return;
+        }
+        try {
+            previewTexture = new HeraldryDraftTexture("library", data.toDenseMeshPixels());
+            previewData = data;
+            previewShip = PreviewShipFactory.create(data.shipType(), data, previewStage);
+        } catch (RuntimeException exception) {
+            closePreview();
+            showMessage("smallshipsheraldry.message.texture_failed");
+        }
     }
 
     private void changePreviewStage(int stage) {
@@ -386,6 +399,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
 
     private void closePreview() {
         previewShip = null;
+        previewData = null;
         if (previewTexture != null) {
             previewTexture.close();
             previewTexture = null;
@@ -422,7 +436,11 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         if (entry == null || controller.currentData() == null) {
             return;
         }
-        HeraldryPatternData imported = entry.data();
+        HeraldryPatternData imported = previewData;
+        if (imported == null) {
+            showMessage("smallshipsheraldry.message.invalid_pattern");
+            return;
+        }
         if (controller.hasDraftWork(imported.shipType())
                 && (confirmAction != Action.LOAD || System.currentTimeMillis() >= confirmUntil)) {
             requestConfirmation(Action.LOAD, "smallshipsheraldry.library.replace_draft");

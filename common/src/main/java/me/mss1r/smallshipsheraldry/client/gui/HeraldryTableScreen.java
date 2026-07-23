@@ -15,6 +15,7 @@ import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
 import me.mss1r.smallshipsheraldry.network.HeraldryPackets;
+import me.mss1r.smallshipsheraldry.network.HeraldryPatternTransfer;
 import me.mss1r.smallshipsheraldry.world.inventory.HeraldryTableMenu;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
 import net.minecraft.client.Minecraft;
@@ -30,6 +31,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -62,12 +64,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private static final int HELP_SIZE = 12;
     private static final int HELP_MARGIN = 5;
     private static final int HELP_Y = 5;
-    private static final int TOOL_X = ELEMENT_X + 16;
+    private static final int TOOL_X = ELEMENT_X;
     private static final int TOOL_Y = 42;
     private static final int TOOL_WIDTH = 18;
     private static final int TOOL_HEIGHT = 18;
     private static final int TOOL_GAP = 4;
-    private static final int TOOL_TEXTURE_WIDTH = 128;
+    private static final int TOOL_TEXTURE_WIDTH = 144;
     private static final int SETTINGS_LABEL_X = ELEMENT_X;
     private static final int SIZE_Y = 68;
     private static final int STROKE_Y = 88;
@@ -113,12 +115,27 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private double strokeStartScreenY;
     private double strokeEndScreenX;
     private double strokeEndScreenY;
+    private boolean selectingPixels;
+    private boolean pixelSelectionActive;
+    private PaintableSailMesh.Hit selectionStartHit;
+    private PaintableSailMesh.Hit selectionEndHit;
+    private List<PaintableSailMesh.ScreenPixel> surfaceSelection = List.of();
+    private SelectionClipboard clipboard;
+    private boolean pasteActive;
+    private boolean movingPaste;
+    private int pasteX;
+    private int pasteY;
+    private PaintableSailMesh.Hit pasteTargetHit;
+    private Map<Integer, Integer> pasteReplacements = Map.of();
+    private final Set<Integer> pastePreviewIndices = new LinkedHashSet<>();
     private boolean gridVisible = true;
     private boolean helpVisible;
     private double lastMouseX;
     private double lastMouseY;
     private boolean editorSettingsLoaded;
     private boolean draftSyncRequested;
+    private int nextTransferId;
+    private HeraldryTableDrafts pendingDraftSync = HeraldryTableDrafts.blank();
     private Component statusMessage;
     private long statusMessageUntil;
     private long clearConfirmationUntil;
@@ -135,6 +152,15 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     @Override
     protected void init() {
         super.init();
+        paintingPreview = false;
+        temporaryPicker = false;
+        rotatingPreview = false;
+        panningPreview = false;
+        selectingPixels = false;
+        movingPaste = false;
+        strokeUndoCaptured = false;
+        strokeStartHit = null;
+        lastStrokeHit = null;
         if (colorPicker == null) {
             colorPicker = new HeraldryColorPicker(font, RIGHT_X, RIGHT_WIDTH);
         }
@@ -158,7 +184,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         session.initialize(menu.getInitialDrafts());
         switchElementContext();
         if (draftTexture == null) {
-            draftTexture = new HeraldryDraftTexture("table", session.pixels());
+            try {
+                draftTexture = new HeraldryDraftTexture("table", session.pixels());
+            } catch (RuntimeException exception) {
+                SmallShipsHeraldry.LOGGER.error("Unable to allocate the heraldry editor texture", exception);
+                showStatus(Component.translatable("smallshipsheraldry.message.texture_failed"));
+            }
         }
         rebuildPreviewShip();
         requestDraftSync();
@@ -166,7 +197,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         int x0 = leftPos;
         int y0 = topPos;
         PaperEditBox colorInput = colorPicker.init(x0, y0);
-        colorPicker.setVisible(editorMode == EditorMode.PAINT && !libraryPanelVisible());
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT && !libraryPanelVisible());
         addRenderableWidget(colorInput);
 
         int previewCenter = x0 + PREVIEW_X + PREVIEW_WIDTH / 2;
@@ -192,7 +223,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         HeraldryGuiTheme.drawWindow(guiGraphics, x0, y0, imageWidth, imageHeight);
 
         drawLeftPanel(guiGraphics, x0, y0);
-        drawPreview(guiGraphics, x0, y0);
+        if (!libraryPanelVisible() && !helpVisible) {
+            drawPreview(guiGraphics, x0, y0);
+        } else {
+            HeraldryGuiTheme.drawPreviewInset(guiGraphics, x0 + PREVIEW_X - 4, y0 + PREVIEW_Y - 4, PREVIEW_WIDTH + 8, PREVIEW_HEIGHT + 8);
+        }
         drawRightPanel(guiGraphics, x0, y0);
         drawTableSlots(guiGraphics, x0, y0);
 
@@ -226,7 +261,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
-        colorPicker.setVisible(editorMode == EditorMode.PAINT && !libraryPanelVisible() && !helpVisible);
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT && !libraryPanelVisible() && !helpVisible);
         if (draftTexture != null) {
             draftTexture.uploadIfDirty();
         }
@@ -266,6 +301,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 previewPitch,
                 previewZoom
         ));
+        closeClipboard();
         if (draftTexture != null) {
             draftTexture.close();
             draftTexture = null;
@@ -306,6 +342,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         if (isInsidePreview(mouseX, mouseY) && (button == 0 || button == 1 || button == 2)) {
             if (button == 1) {
+                clearPixelSelectionOverlay();
                 if (hasShiftDown()) {
                     panningPreview = true;
                 } else {
@@ -314,6 +351,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             if (button == 2) {
+                clearPixelSelectionOverlay();
                 panningPreview = true;
                 return true;
             }
@@ -322,6 +360,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
             if (editorMode != EditorMode.PAINT) {
                 return true;
+            }
+            if (activeTool == PaintTool.SELECT) {
+                return beginPixelSelection(mouseX, mouseY);
             }
             temporaryPicker = hasAltDown();
             if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) && strokeMode == StrokeMode.LINE && !temporaryPicker) {
@@ -352,6 +393,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return libraryPanel.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
         if (colorPicker.mouseDragged(mouseX, mouseY)) {
+            return true;
+        }
+        if (selectingPixels && button == 0) {
+            updatePixelSelection(mouseX, mouseY);
+            return true;
+        }
+        if (movingPaste && button == 0) {
+            movePaste(mouseX, mouseY);
             return true;
         }
         if (rotatingPreview && button == 1) {
@@ -394,6 +443,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             paintingPreview = false;
             rotatingPreview = false;
             panningPreview = false;
+            selectingPixels = false;
+            movingPaste = false;
             colorPicker.mouseReleased();
             strokeUndoCaptured = false;
             temporaryPicker = false;
@@ -418,12 +469,48 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             helpVisible = false;
             return true;
         }
+        if (hasControlDown() && keyCode == GLFW.GLFW_KEY_C) {
+            copyPixelSelection(false);
+            return true;
+        }
+        if (hasControlDown() && keyCode == GLFW.GLFW_KEY_X) {
+            copyPixelSelection(true);
+            return true;
+        }
+        if (hasControlDown() && keyCode == GLFW.GLFW_KEY_V) {
+            setActiveTool(PaintTool.SELECT);
+            editorMode = EditorMode.PAINT;
+            beginPaste();
+            return true;
+        }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_Z) {
             if (hasShiftDown()) {
                 redo();
             } else {
                 undo();
             }
+            return true;
+        }
+        if (pasteActive && keyCode == GLFW.GLFW_KEY_ENTER) {
+            commitPaste();
+            return true;
+        }
+        if (pasteActive && keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            cancelPaste();
+            return true;
+        }
+        if (pasteActive && (keyCode == GLFW.GLFW_KEY_LEFT
+                || keyCode == GLFW.GLFW_KEY_RIGHT
+                || keyCode == GLFW.GLFW_KEY_UP
+                || keyCode == GLFW.GLFW_KEY_DOWN)) {
+            int step = hasShiftDown() ? 8 : 1;
+            int deltaX = keyCode == GLFW.GLFW_KEY_LEFT ? -step : keyCode == GLFW.GLFW_KEY_RIGHT ? step : 0;
+            int deltaY = keyCode == GLFW.GLFW_KEY_UP ? -step : keyCode == GLFW.GLFW_KEY_DOWN ? step : 0;
+            movePasteBy(deltaX, deltaY);
+            return true;
+        }
+        if (activeTool == PaintTool.SELECT && keyCode == GLFW.GLFW_KEY_DELETE) {
+            clearPixelSelection();
             return true;
         }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_Y) {
@@ -466,22 +553,27 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_B) {
-            activeTool = PaintTool.BRUSH;
+            setActiveTool(PaintTool.BRUSH);
             editorMode = EditorMode.PAINT;
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_E) {
-            activeTool = PaintTool.ERASER;
+            setActiveTool(PaintTool.ERASER);
             editorMode = EditorMode.PAINT;
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_I) {
-            activeTool = PaintTool.PICKER;
+            setActiveTool(PaintTool.PICKER);
             editorMode = EditorMode.PAINT;
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_F) {
-            activeTool = PaintTool.FILL;
+            setActiveTool(PaintTool.FILL);
+            editorMode = EditorMode.PAINT;
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_M) {
+            setActiveTool(PaintTool.SELECT);
             editorMode = EditorMode.PAINT;
             return true;
         }
@@ -498,6 +590,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return libraryPanel.mouseScrolled(mouseX, mouseY, amount);
         }
         if (isInsidePreview(mouseX, mouseY)) {
+            clearPixelSelectionOverlay();
             zoomPreviewAt(mouseX, mouseY, amount);
             return true;
         }
@@ -561,6 +654,19 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     private void drawPaintPanel(GuiGraphics guiGraphics, int x0, int y0) {
         drawToolButtons(guiGraphics, x0, y0);
+        if (activeTool == PaintTool.SELECT) {
+            Component hint = Component.translatable(pasteActive
+                    ? "smallshipsheraldry.selection.move_hint"
+                    : "smallshipsheraldry.selection.drag_hint");
+            int lineY = y0 + 72;
+            for (FormattedCharSequence line : font.split(hint, ELEMENT_WIDTH)) {
+                guiGraphics.drawString(font, line, x0 + ELEMENT_X, lineY, HeraldryGuiTheme.MUTED_INK, false);
+                lineY += 10;
+            }
+            drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.selection.shortcuts"),
+                    x0 + ELEMENT_X + ELEMENT_WIDTH / 2, y0 + 132, HeraldryGuiTheme.MUTED_INK);
+            return;
+        }
         if (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) {
             guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.size"), x0 + SETTINGS_LABEL_X, y0 + SIZE_Y + 4, HeraldryGuiTheme.INK, false);
             drawControl(guiGraphics, x0 + 62, y0 + SIZE_Y, 15, 16, false, Component.literal("-"));
@@ -662,6 +768,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             PaintableSailMesh.clearEditorHighlightFaceIndex();
             PaintableSailMesh.clearEditorGridFaceIndex();
         }
+        drawPixelSelection(guiGraphics);
         if (!selectedElementIds.isEmpty()) {
             String selectionLabel;
             if (selectedElementIds.size() == 1) {
@@ -690,12 +797,35 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         HeraldryGuiTheme.drawPanel(guiGraphics, x0 + RIGHT_X - 4, y0 + 18, RIGHT_WIDTH + 8, ELEMENT_HEIGHT + 22);
         switch (editorMode) {
             case PAINT -> {
-                colorPicker.render(guiGraphics);
-                drawControl(guiGraphics, x0 + RIGHT_X + 4, y0 + 142, 80, 17, false, Component.translatable("smallshipsheraldry.button.base"));
+                if (activeTool == PaintTool.SELECT) {
+                    drawSelectionActions(guiGraphics, x0, y0);
+                } else {
+                    colorPicker.render(guiGraphics);
+                    drawControl(guiGraphics, x0 + RIGHT_X + 4, y0 + 142, 80, 17, false, Component.translatable("smallshipsheraldry.button.base"));
+                }
             }
             case PARTS -> drawPartsActions(guiGraphics, x0, y0);
             case VIEW -> drawViewDetails(guiGraphics, x0, y0);
         }
+    }
+
+    private void drawSelectionActions(GuiGraphics guiGraphics, int x0, int y0) {
+        int x = x0 + RIGHT_X + 4;
+        int y = y0 + 28;
+        drawControl(guiGraphics, x, y, 38, 18, false, Component.translatable("smallshipsheraldry.selection.copy"));
+        drawControl(guiGraphics, x + 42, y, 38, 18, false, Component.translatable("smallshipsheraldry.selection.cut"));
+        drawControl(guiGraphics, x, y + 22, 80, 18, pasteActive, Component.translatable("smallshipsheraldry.selection.paste"));
+        drawControl(guiGraphics, x, y + 48, 38, 18, pasteActive, Component.translatable("smallshipsheraldry.selection.apply"));
+        drawControl(guiGraphics, x + 42, y + 48, 38, 18, false, Component.translatable("smallshipsheraldry.selection.cancel"));
+        drawControl(guiGraphics, x, y + 70, 80, 18, false, Component.translatable("smallshipsheraldry.selection.delete"));
+
+        SelectionRect rect = pixelSelection();
+        Component summary = pasteActive && clipboard != null
+                ? Component.translatable("smallshipsheraldry.selection.size", clipboard.width(), clipboard.height())
+                : rect == null
+                ? Component.translatable("smallshipsheraldry.selection.none")
+                : Component.translatable("smallshipsheraldry.selection.size", rect.width(), rect.height());
+        drawCenteredNoShadow(guiGraphics, summary, x + 40, y + 96, HeraldryGuiTheme.MUTED_INK);
     }
 
     private void drawPartsActions(GuiGraphics guiGraphics, int x0, int y0) {
@@ -739,6 +869,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     private void openLibrary() {
         helpVisible = false;
+        clearPixelSelectionOverlay();
         if (libraryButton != null) {
             libraryButton.visible = false;
         }
@@ -751,6 +882,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void loadLibraryPattern(HeraldryPatternData imported) {
+        clearPixelSelectionOverlay();
         session.importPattern(imported);
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
@@ -851,8 +983,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             int x = leftPos + MODE_TAB_X + index * MODE_TAB_WIDTH;
             int y = topPos + MODE_TAB_Y;
             if (isInside(mouseX, mouseY, x, y, MODE_TAB_WIDTH - 1, MODE_TAB_HEIGHT)) {
+                if (modes[index] != EditorMode.PAINT) {
+                    clearPixelSelectionOverlay();
+                }
                 editorMode = modes[index];
-                colorPicker.setVisible(editorMode == EditorMode.PAINT);
+                colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT);
                 return true;
             }
         }
@@ -861,6 +996,39 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     private boolean handlePaintControlClick(double mouseX, double mouseY, int button) {
         if (button != 0) {
+            return false;
+        }
+        if (activeTool == PaintTool.SELECT) {
+            int x = leftPos + RIGHT_X + 4;
+            int y = topPos + 28;
+            if (isInside(mouseX, mouseY, x, y, 38, 18)) {
+                copyPixelSelection(false);
+                return true;
+            }
+            if (isInside(mouseX, mouseY, x + 42, y, 38, 18)) {
+                copyPixelSelection(true);
+                return true;
+            }
+            if (isInside(mouseX, mouseY, x, y + 22, 80, 18)) {
+                beginPaste();
+                return true;
+            }
+            if (isInside(mouseX, mouseY, x, y + 48, 38, 18)) {
+                commitPaste();
+                return true;
+            }
+            if (isInside(mouseX, mouseY, x + 42, y + 48, 38, 18)) {
+                if (pasteActive) {
+                    cancelPaste();
+                } else {
+                    clearPixelSelectionOverlay();
+                }
+                return true;
+            }
+            if (isInside(mouseX, mouseY, x, y + 70, 80, 18)) {
+                clearPixelSelection();
+                return true;
+            }
             return false;
         }
         if (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) {
@@ -1002,6 +1170,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return true;
         }
         if (isInside(mouseX, mouseY, x, y + 66, ELEMENT_WIDTH, 17)) {
+            clearPixelSelectionOverlay();
             previewYaw = 180.0F;
             previewPitch = -10.0F;
             previewZoom = 1.0F;
@@ -1013,6 +1182,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void setCamera(float yaw, float pitch) {
+        clearPixelSelectionOverlay();
         previewYaw = yaw;
         previewPitch = pitch;
         previewPanX = 0.0F;
@@ -1044,7 +1214,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             discardLatestUndo();
             return;
         }
-        draftTexture.replacePixels(session.pixels());
+        replaceDraftTexturePixels();
         commitPaintBuffer();
     }
 
@@ -1126,7 +1296,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             int x = leftPos + TOOL_X + index * (TOOL_WIDTH + TOOL_GAP);
             int y = topPos + TOOL_Y;
             if (isInside(mouseX, mouseY, x, y, TOOL_WIDTH, TOOL_HEIGHT)) {
-                activeTool = tools[index];
+                setActiveTool(tools[index]);
                 return true;
             }
         }
@@ -1171,7 +1341,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             if (fillMode == FillMode.REPLACE) {
-                draftTexture.replacePixels(session.pixels());
+                replaceDraftTexturePixels();
             } else {
                 syncHitFace(paintHit);
             }
@@ -1227,8 +1397,354 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private void syncHitFace(PaintableSailMesh.Hit hit) {
         if (draftTexture != null) {
             draftTexture.updateRegion(session.pixels(), hit.slotX() - 1, hit.slotY() - 1, hit.slotWidth() + 2, hit.slotHeight() + 2);
-            draftTexture.uploadIfDirty();
         }
+    }
+
+    private void replaceDraftTexturePixels() {
+        if (draftTexture != null) {
+            draftTexture.replacePixels(session.pixels());
+        }
+    }
+
+    private boolean beginPixelSelection(double mouseX, double mouseY) {
+        if (pasteActive && clipboard != null) {
+            movingPaste = true;
+            updatePasteTarget(mouseX, mouseY);
+            return true;
+        }
+
+        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
+        if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
+            clearPixelSelectionOverlay();
+            return true;
+        }
+        pixelSelectionActive = true;
+        selectingPixels = true;
+        selectionStartHit = sampled.get();
+        selectionEndHit = sampled.get();
+        refreshSurfaceSelection();
+        return true;
+    }
+
+    private void updatePixelSelection(double mouseX, double mouseY) {
+        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
+        if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
+            return;
+        }
+        Optional<PaintableSailMesh.SurfacePoint> startPoint =
+                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionStartHit);
+        Optional<PaintableSailMesh.SurfacePoint> endPoint =
+                PaintableSailMesh.surfacePoint(previewShip, previewStage, sampled.get());
+        if (startPoint.isEmpty() || endPoint.isEmpty()
+                || startPoint.get().componentId() != endPoint.get().componentId()) {
+            return;
+        }
+        selectionEndHit = sampled.get();
+        refreshSurfaceSelection();
+    }
+
+    private void refreshSurfaceSelection() {
+        if (!pixelSelectionActive || selectionStartHit == null || selectionEndHit == null) {
+            surfaceSelection = List.of();
+            return;
+        }
+        surfaceSelection = PaintableSailMesh.pixelsInSurfaceRect(
+                previewShip,
+                previewStage,
+                selectionStartHit,
+                selectionEndHit,
+                selectedElementIds,
+                hiddenElements
+        );
+    }
+
+    private void copyPixelSelection(boolean cut) {
+        if (!pixelSelectionActive || surfaceSelection.isEmpty()) {
+            showStatus(Component.translatable("smallshipsheraldry.selection.select_first"));
+            return;
+        }
+
+        Map<Integer, CapturedPixel> capturedPixels = new HashMap<>();
+        Set<Integer> clearIndices = new LinkedHashSet<>();
+        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
+        for (PaintableSailMesh.ScreenPixel selectedPixel : surfaceSelection) {
+            PaintableSailMesh.Hit hit = selectedPixel.hit();
+            int atlasIndex = hit.pixelY() * atlasWidth + hit.pixelX();
+            int color = session.pixels()[atlasIndex];
+            capturedPixels.putIfAbsent(atlasIndex, new CapturedPixel(
+                    hit,
+                    selectedPixel.screenX(),
+                    selectedPixel.screenY(),
+                    color
+            ));
+            if (cut && color != 0) {
+                clearIndices.add(atlasIndex);
+            }
+        }
+        if (capturedPixels.isEmpty()) {
+            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
+            return;
+        }
+
+        double selectionCenterX = surfaceSelection.stream()
+                .mapToDouble(PaintableSailMesh.ScreenPixel::screenX)
+                .average()
+                .orElse(leftPos + PREVIEW_X + PREVIEW_WIDTH * 0.5D);
+        double selectionCenterY = surfaceSelection.stream()
+                .mapToDouble(PaintableSailMesh.ScreenPixel::screenY)
+                .average()
+                .orElse(topPos + PREVIEW_Y + PREVIEW_HEIGHT * 0.5D);
+        CapturedPixel anchor = capturedPixels.values().stream()
+                .min((first, second) -> Double.compare(
+                        distanceSquared(first.screenX(), first.screenY(), selectionCenterX, selectionCenterY),
+                        distanceSquared(second.screenX(), second.screenY(), selectionCenterX, selectionCenterY)
+                ))
+                .orElseThrow();
+        Optional<PaintableSailMesh.SurfacePoint> anchorPoint = PaintableSailMesh.surfacePoint(previewShip, previewStage, anchor.hit());
+        if (anchorPoint.isEmpty()) {
+            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
+            return;
+        }
+
+        List<PaintableSailMesh.ClipboardPixel> geometryPixels = new ArrayList<>(capturedPixels.size());
+        float minU = Float.MAX_VALUE;
+        float minV = Float.MAX_VALUE;
+        float maxU = -Float.MAX_VALUE;
+        float maxV = -Float.MAX_VALUE;
+        for (CapturedPixel captured : capturedPixels.values()) {
+            Optional<PaintableSailMesh.SurfacePoint> point = PaintableSailMesh.surfacePoint(previewShip, previewStage, captured.hit());
+            if (point.isEmpty() || point.get().componentId() != anchorPoint.get().componentId()) {
+                continue;
+            }
+            float offsetU = point.get().u() - anchorPoint.get().u();
+            float offsetV = point.get().v() - anchorPoint.get().v();
+            geometryPixels.add(new PaintableSailMesh.ClipboardPixel(
+                    offsetU,
+                    offsetV,
+                    captured.color()
+            ));
+            minU = Math.min(minU, offsetU);
+            minV = Math.min(minV, offsetV);
+            maxU = Math.max(maxU, offsetU);
+            maxV = Math.max(maxV, offsetV);
+        }
+        if (geometryPixels.isEmpty()) {
+            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
+            return;
+        }
+
+        int geometryWidth = Math.max(1, Mth.ceil((maxU - minU) * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT) + 1);
+        int geometryHeight = Math.max(1, Mth.ceil((maxV - minV) * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT) + 1);
+        closeClipboard();
+        clipboard = new SelectionClipboard(
+                geometryWidth,
+                geometryHeight,
+                List.copyOf(geometryPixels),
+                Mth.clamp(Mth.floor(selectionCenterX - leftPos - PREVIEW_X), 0, PREVIEW_WIDTH - 1),
+                Mth.clamp(Mth.floor(selectionCenterY - topPos - PREVIEW_Y), 0, PREVIEW_HEIGHT - 1)
+        );
+
+        if (cut && !clearIndices.isEmpty() && pushUndo()) {
+            for (int atlasIndex : clearIndices) {
+                session.pixels()[atlasIndex] = 0;
+            }
+            replaceDraftTexturePixels();
+            commitPaintBuffer();
+        }
+        showStatus(Component.translatable("smallshipsheraldry.selection.copied", geometryWidth, geometryHeight));
+    }
+
+    private void beginPaste() {
+        if (clipboard == null) {
+            showStatus(Component.translatable("smallshipsheraldry.selection.clipboard_empty"));
+            return;
+        }
+        pixelSelectionActive = false;
+        selectingPixels = false;
+        movingPaste = false;
+        pasteActive = true;
+        pasteX = clipboard.originX();
+        pasteY = clipboard.originY();
+        updatePasteTarget(leftPos + PREVIEW_X + pasteX + 0.5D, topPos + PREVIEW_Y + pasteY + 0.5D);
+    }
+
+    private void movePaste(double mouseX, double mouseY) {
+        if (!pasteActive || clipboard == null) {
+            movingPaste = false;
+            return;
+        }
+        updatePasteTarget(mouseX, mouseY);
+    }
+
+    private void movePasteBy(int deltaX, int deltaY) {
+        if (!pasteActive || clipboard == null || pasteTargetHit == null) {
+            return;
+        }
+        float pixelScale = PaintableSailMesh.projectedPixelScale(previewShip, pasteTargetHit);
+        updatePasteTarget(
+                leftPos + PREVIEW_X + pasteX + 0.5D + deltaX * pixelScale,
+                topPos + PREVIEW_Y + pasteY + 0.5D + deltaY * pixelScale
+        );
+    }
+
+    private boolean updatePasteTarget(double mouseX, double mouseY) {
+        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
+        if (sampled.isEmpty() || !isHitInSelection(sampled.get()) || clipboard == null) {
+            return false;
+        }
+        pasteTargetHit = sampled.get();
+        pasteX = previewRelativeX(mouseX);
+        pasteY = previewRelativeY(mouseY);
+        updatePastePreview(PaintableSailMesh.mapClipboardPixels(
+                previewShip,
+                previewStage,
+                pasteTargetHit,
+                clipboard.pixels(),
+                selectedElementIds,
+                hiddenElements
+        ));
+        return true;
+    }
+
+    private void updatePastePreview(Map<Integer, Integer> replacements) {
+        restorePastePreview();
+        pasteReplacements = Map.copyOf(replacements);
+        if (draftTexture == null) {
+            return;
+        }
+        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
+        for (Map.Entry<Integer, Integer> replacement : pasteReplacements.entrySet()) {
+            int atlasIndex = replacement.getKey();
+            draftTexture.setPixel(atlasIndex % atlasWidth, atlasIndex / atlasWidth, replacement.getValue());
+            pastePreviewIndices.add(atlasIndex);
+        }
+    }
+
+    private void restorePastePreview() {
+        if (draftTexture != null && !pastePreviewIndices.isEmpty()) {
+            int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
+            for (int atlasIndex : pastePreviewIndices) {
+                draftTexture.setPixel(atlasIndex % atlasWidth, atlasIndex / atlasWidth, session.pixels()[atlasIndex]);
+            }
+        }
+        pastePreviewIndices.clear();
+    }
+
+    private void commitPaste() {
+        if (!pasteActive || clipboard == null) {
+            return;
+        }
+
+        Map<Integer, Integer> replacements = pasteReplacements;
+        boolean changed = replacements.entrySet().stream()
+                .anyMatch(entry -> session.pixels()[entry.getKey()] != entry.getValue());
+        cancelPaste();
+        if (!changed) {
+            showStatus(Component.translatable(replacements.isEmpty()
+                    ? "smallshipsheraldry.selection.no_target"
+                    : "smallshipsheraldry.selection.unchanged"));
+            return;
+        }
+        if (!pushUndo()) {
+            return;
+        }
+        replacements.forEach((index, color) -> session.pixels()[index] = color);
+        replaceDraftTexturePixels();
+        commitPaintBuffer();
+        pixelSelectionActive = false;
+        selectionStartHit = null;
+        selectionEndHit = null;
+        surfaceSelection = List.of();
+    }
+
+    private void clearPixelSelection() {
+        if (pasteActive) {
+            cancelPaste();
+            return;
+        }
+        if (!pixelSelectionActive || surfaceSelection.isEmpty()) {
+            return;
+        }
+
+        Set<Integer> clearIndices = new LinkedHashSet<>();
+        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
+        for (PaintableSailMesh.ScreenPixel selectedPixel : surfaceSelection) {
+            PaintableSailMesh.Hit hit = selectedPixel.hit();
+            int atlasIndex = hit.pixelY() * atlasWidth + hit.pixelX();
+            if (session.pixels()[atlasIndex] != 0) {
+                clearIndices.add(atlasIndex);
+            }
+        }
+        if (clearIndices.isEmpty() || !pushUndo()) {
+            return;
+        }
+        for (int atlasIndex : clearIndices) {
+            session.pixels()[atlasIndex] = 0;
+        }
+        replaceDraftTexturePixels();
+        commitPaintBuffer();
+    }
+
+    private SelectionRect pixelSelection() {
+        if (!pixelSelectionActive || surfaceSelection.isEmpty()
+                || selectionStartHit == null || selectionEndHit == null) {
+            return null;
+        }
+        Optional<PaintableSailMesh.SurfacePoint> start =
+                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionStartHit);
+        Optional<PaintableSailMesh.SurfacePoint> end =
+                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionEndHit);
+        if (start.isEmpty() || end.isEmpty()
+                || start.get().componentId() != end.get().componentId()) {
+            return null;
+        }
+        int width = Math.max(1, Mth.floor(
+                Math.abs(end.get().u() - start.get().u())
+                        * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT + 0.5F
+        ) + 1);
+        int height = Math.max(1, Mth.floor(
+                Math.abs(end.get().v() - start.get().v())
+                        * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT + 0.5F
+        ) + 1);
+        return new SelectionRect(0, 0, width, height);
+    }
+
+    private int previewRelativeX(double mouseX) {
+        return Mth.clamp(Mth.floor(mouseX - leftPos - PREVIEW_X), 0, PREVIEW_WIDTH - 1);
+    }
+
+    private int previewRelativeY(double mouseY) {
+        return Mth.clamp(Mth.floor(mouseY - topPos - PREVIEW_Y), 0, PREVIEW_HEIGHT - 1);
+    }
+
+    private void cancelPaste() {
+        restorePastePreview();
+        pasteActive = false;
+        movingPaste = false;
+        pasteTargetHit = null;
+        pasteReplacements = Map.of();
+    }
+
+    private void clearPixelSelectionOverlay() {
+        selectingPixels = false;
+        pixelSelectionActive = false;
+        selectionStartHit = null;
+        selectionEndHit = null;
+        surfaceSelection = List.of();
+        cancelPaste();
+    }
+
+    private void closeClipboard() {
+        cancelPaste();
+        clipboard = null;
+    }
+
+    private void setActiveTool(PaintTool tool) {
+        if (activeTool != tool && tool != PaintTool.SELECT) {
+            clearPixelSelectionOverlay();
+        }
+        activeTool = tool;
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT);
     }
 
     private void applyLineStroke() {
@@ -1317,7 +1833,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private Optional<Integer> gridFaceIndexUnderMouse() {
-        if (!isInsidePreview(lastMouseX, lastMouseY)) {
+        if (activeTool == PaintTool.SELECT || !isInsidePreview(lastMouseX, lastMouseY)) {
             return Optional.empty();
         }
 
@@ -1382,9 +1898,15 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void changePreviewType(ShipPreviewType newPreviewType) {
-        if (newPreviewType == session.shipType() || currentData() == null) {
+        if (newPreviewType == session.shipType()) {
             return;
         }
+        HeraldryPatternData current = currentData();
+        if (current == null || !sendPatternTransfer(HeraldryPackets.TABLE_DRAFT_UPDATE, current)) {
+            return;
+        }
+        session.markSaved();
+        clearPixelSelectionOverlay();
         session.switchShip(newPreviewType);
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
@@ -1396,7 +1918,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void changePreviewStage(int newStage) {
-        previewStage = Mth.clamp(newStage, 0, 4);
+        int clampedStage = Mth.clamp(newStage, 0, 4);
+        if (clampedStage == previewStage) {
+            return;
+        }
+        clearPixelSelectionOverlay();
+        previewStage = clampedStage;
         switchElementContext();
         PreviewShipFactory.setSailState(previewShip, previewStage);
     }
@@ -1406,11 +1933,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (data == null) {
             return;
         }
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBlockPos(menu.getBlockPos());
-        buf.writeNbt(data.toTag());
-        NetworkManager.sendToServer(HeraldryPackets.EXPORT_PATTERN, buf);
-        session.markSaved();
+        if (sendPatternTransfer(HeraldryPackets.EXPORT_PATTERN, data)) {
+            session.markSaved();
+        }
     }
 
     private void sendDraftUpdate() {
@@ -1418,11 +1943,32 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (data == null) {
             return;
         }
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBlockPos(menu.getBlockPos());
-        buf.writeNbt(session.drafts().toTag());
-        NetworkManager.sendToServer(HeraldryPackets.TABLE_DRAFT_UPDATE, buf);
+        sendPatternTransfer(HeraldryPackets.TABLE_DRAFT_UPDATE, data);
         session.markSaved();
+    }
+
+    private boolean sendPatternTransfer(ResourceLocation packetId, HeraldryPatternData data) {
+        byte[] encoded;
+        try {
+            encoded = HeraldryPatternTransfer.encode(data.toTag());
+        } catch (IOException exception) {
+            showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
+            return false;
+        }
+
+        int transferId = ++nextTransferId;
+        int chunkCount = HeraldryPatternTransfer.chunkCount(encoded.length);
+        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+            buf.writeBlockPos(menu.getBlockPos());
+            buf.writeVarInt(transferId);
+            buf.writeVarInt(chunkIndex);
+            buf.writeVarInt(chunkCount);
+            buf.writeVarInt(encoded.length);
+            buf.writeByteArray(HeraldryPatternTransfer.chunk(encoded, chunkIndex));
+            NetworkManager.sendToServer(packetId, buf);
+        }
+        return true;
     }
 
     private void requestDraftSync() {
@@ -1436,20 +1982,41 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         NetworkManager.sendToServer(HeraldryPackets.TABLE_DRAFT_REQUEST, buf);
     }
 
-    public static void handleDraftSync(BlockPos blockPos, CompoundTag draftTag) {
+    public static void handleDraftSync(
+            BlockPos blockPos,
+            ShipPreviewType activeType,
+            ShipPreviewType draftType,
+            CompoundTag patternTag,
+            boolean first,
+            boolean last
+    ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof HeraldryTableScreen screen) {
-            screen.applyDraftSync(blockPos, draftTag);
+            screen.applyDraftSync(blockPos, activeType, draftType, patternTag, first, last);
         }
     }
 
-    private void applyDraftSync(BlockPos blockPos, CompoundTag draftTag) {
-        if (!menu.getBlockPos().equals(blockPos) || draftTag == null) {
+    private void applyDraftSync(
+            BlockPos blockPos,
+            ShipPreviewType activeType,
+            ShipPreviewType draftType,
+            CompoundTag patternTag,
+            boolean first,
+            boolean last
+    ) {
+        if (!menu.getBlockPos().equals(blockPos) || patternTag == null) {
             return;
         }
-        if (!session.applyServerSync(HeraldryTableDrafts.fromTag(draftTag))) {
+        if (first) {
+            pendingDraftSync = HeraldryTableDrafts.blank().withActiveShipType(activeType);
+        }
+        HeraldryPatternData.tryFromRootTag(patternTag)
+                .filter(data -> data.shipType() == draftType)
+                .ifPresent(data -> pendingDraftSync = pendingDraftSync.withDraft(data).withActiveShipType(activeType));
+        if (!last || !session.applyServerSync(pendingDraftSync)) {
             return;
         }
+        clearPixelSelectionOverlay();
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
         }
@@ -1623,6 +2190,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         return slash >= 0 ? elementId.substring(slash + 1) : elementId;
     }
 
+    private static double distanceSquared(double x, double y, double targetX, double targetY) {
+        double deltaX = x - targetX;
+        double deltaY = y - targetY;
+        return deltaX * deltaX + deltaY * deltaY;
+    }
+
     private List<PaintableSailMesh.Element> elements() {
         List<PaintableSailMesh.Element> elements = new ArrayList<>(PaintableSailMesh.elements(session.shipType(), previewStage));
         elements.sort((first, second) -> {
@@ -1704,6 +2277,61 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         guiGraphics.blit(TOOL_ICONS, x + (width - 16) / 2, y + (height - 16) / 2, iconU, 0, 16, 16, TOOL_TEXTURE_WIDTH, 16);
     }
 
+    private void drawPixelSelection(GuiGraphics guiGraphics) {
+        if (editorMode != EditorMode.PAINT || activeTool != PaintTool.SELECT) {
+            return;
+        }
+        SelectionRect rect = pixelSelection();
+        if (rect == null && !pasteActive) {
+            return;
+        }
+
+        int previewLeft = leftPos + PREVIEW_X;
+        int previewTop = topPos + PREVIEW_Y;
+        guiGraphics.flush();
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(0.0F, 0.0F, 500.0F);
+        guiGraphics.enableScissor(previewLeft, previewTop, previewLeft + PREVIEW_WIDTH, previewTop + PREVIEW_HEIGHT);
+        try {
+            if (pasteActive) {
+                int markerX = previewLeft + pasteX;
+                int markerY = previewTop + pasteY;
+                guiGraphics.fill(markerX - 4, markerY, markerX + 5, markerY + 1, HeraldryGuiTheme.GOLD_LIGHT);
+                guiGraphics.fill(markerX, markerY - 4, markerX + 1, markerY + 5, HeraldryGuiTheme.GOLD_LIGHT);
+                guiGraphics.fill(markerX, markerY, markerX + 1, markerY + 1, 0xFFFFFFFF);
+            } else if (rect != null) {
+                Map<Integer, Integer> halfSizes = new HashMap<>();
+                for (PaintableSailMesh.ScreenPixel pixel : surfaceSelection) {
+                    int halfSize = halfSizes.computeIfAbsent(
+                            pixel.hit().faceIndex(),
+                            ignored -> Math.max(1, Mth.ceil(
+                                    PaintableSailMesh.projectedPixelScale(previewShip, pixel.hit()) * 0.42F
+                            ))
+                    );
+                    int centerX = Mth.floor(pixel.screenX());
+                    int centerY = Mth.floor(pixel.screenY());
+                    guiGraphics.fill(
+                            centerX - halfSize,
+                            centerY - halfSize,
+                            centerX + halfSize + 1,
+                            centerY + halfSize + 1,
+                            0x55E7C778
+                    );
+                    guiGraphics.fill(centerX, centerY, centerX + 1, centerY + 1, HeraldryGuiTheme.GOLD_LIGHT);
+                }
+            }
+        } finally {
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            RenderSystem.disableBlend();
+            guiGraphics.disableScissor();
+            guiGraphics.pose().popPose();
+            guiGraphics.flush();
+            RenderSystem.enableDepthTest();
+        }
+    }
+
     private void drawLinePreview(GuiGraphics guiGraphics) {
         double deltaX = strokeEndScreenX - strokeStartScreenX;
         double deltaY = strokeEndScreenY - strokeStartScreenY;
@@ -1732,11 +2360,27 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
+    private record SelectionRect(int x, int y, int width, int height) {
+    }
+
+    private record SelectionClipboard(
+            int width,
+            int height,
+            List<PaintableSailMesh.ClipboardPixel> pixels,
+            int originX,
+            int originY
+    ) {
+    }
+
+    private record CapturedPixel(PaintableSailMesh.Hit hit, double screenX, double screenY, int color) {
+    }
+
     private enum PaintTool {
         BRUSH("brush", true, 0),
         ERASER("eraser", true, 16),
         PICKER("picker", false, 32),
-        FILL("fill", false, 48);
+        FILL("fill", false, 48),
+        SELECT("select", false, 128);
 
         private final String label;
         private final boolean drags;

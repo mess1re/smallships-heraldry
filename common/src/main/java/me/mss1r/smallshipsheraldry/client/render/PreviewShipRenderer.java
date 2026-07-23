@@ -45,25 +45,25 @@ public final class PreviewShipRenderer {
 
         guiGraphics.enableScissor(left, top, right, bottom);
         guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(centerX, centerY, 180.0D);
-        guiGraphics.pose().mulPoseMatrix(new Matrix4f().scaling((float) scale, (float) scale, (float) (-scale)));
-        guiGraphics.pose().translate(0.0F, 0.05F, 0.0F);
-        guiGraphics.pose().mulPose(orientation);
-        Lighting.setupForEntityInInventory();
         EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
-        dispatcher.setRenderShadow(false);
-        PaintableSailMesh.setEditorEntitySailsSuppressed(true);
-        SailBannerOverlayRenderer.setEditorDraftTexture(draftTexture);
         try {
+            guiGraphics.pose().translate(centerX, centerY, 180.0D);
+            guiGraphics.pose().mulPoseMatrix(new Matrix4f().scaling((float) scale, (float) scale, (float) (-scale)));
+            guiGraphics.pose().translate(0.0F, 0.05F, 0.0F);
+            guiGraphics.pose().mulPose(orientation);
+            Lighting.setupForEntityInInventory();
+            dispatcher.setRenderShadow(false);
+            PaintableSailMesh.setEditorEntitySailsSuppressed(true);
+            SailBannerOverlayRenderer.setEditorDraftTexture(draftTexture);
             RenderSystem.runAsFancy(() -> dispatcher.render(ship, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, guiGraphics.pose(), guiGraphics.bufferSource(), LightTexture.FULL_BRIGHT));
+            guiGraphics.flush();
         } finally {
             SailBannerOverlayRenderer.clearEditorDraftTexture();
             PaintableSailMesh.clearEditorEntitySailsSuppressed();
+            dispatcher.setRenderShadow(true);
+            guiGraphics.pose().popPose();
+            guiGraphics.disableScissor();
+            Lighting.setupFor3DItems();
         }
-        guiGraphics.flush();
-        dispatcher.setRenderShadow(true);
-        guiGraphics.pose().popPose();
-        guiGraphics.disableScissor();
-        Lighting.setupFor3DItems();
     }
 }

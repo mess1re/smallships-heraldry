@@ -119,7 +119,6 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     @Override
     public void saveExtraData(FriendlyByteBuf buf) {
         buf.writeBlockPos(getBlockPos());
-        buf.writeNbt(drafts.toTag());
     }
 
     public boolean exportPattern(Player player, HeraldryPatternData data) {

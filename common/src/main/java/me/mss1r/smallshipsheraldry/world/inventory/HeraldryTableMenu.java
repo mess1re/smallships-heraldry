@@ -4,16 +4,17 @@ import dev.architectury.networking.NetworkManager;
 import io.netty.buffer.Unpooled;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
+import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
 import me.mss1r.smallshipsheraldry.network.HeraldryPackets;
+import me.mss1r.smallshipsheraldry.network.HeraldryPatternTransfer;
+import me.mss1r.smallshipsheraldry.registry.HeraldryBlocks;
 import me.mss1r.smallshipsheraldry.registry.HeraldryMenus;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -36,6 +37,8 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
     private final Level level;
     private final BlockPos blockPos;
     private final HeraldryTableDrafts initialDrafts;
+    private final HeraldryPatternTransfer.Collector draftCollector = new HeraldryPatternTransfer.Collector();
+    private final HeraldryPatternTransfer.Collector exportCollector = new HeraldryPatternTransfer.Collector();
 
     public HeraldryTableMenu(int containerId, Inventory inventory, HeraldryTableBlockEntity blockEntity) {
         this(containerId, inventory, blockEntity, blockEntity.getDrafts());
@@ -65,14 +68,10 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
 
     public static HeraldryTableMenu fromNetwork(int containerId, Inventory inventory, FriendlyByteBuf buf) {
         BlockPos blockPos = buf.readBlockPos();
-        HeraldryTableDrafts initialDrafts = HeraldryTableDrafts.fromTag(buf.readNbt());
-        Container container = inventory.player.level().getBlockEntity(blockPos) instanceof HeraldryTableBlockEntity blockEntity
-                ? blockEntity
-                : null;
-        if (container instanceof HeraldryTableBlockEntity blockEntity) {
-            return new HeraldryTableMenu(containerId, inventory, blockEntity, initialDrafts);
-        }
-        throw new IllegalStateException("Missing heraldry table block entity at " + blockPos);
+        HeraldryTableBlockEntity blockEntity = inventory.player.level().getBlockEntity(blockPos) instanceof HeraldryTableBlockEntity table
+                ? table
+                : new HeraldryTableBlockEntity(blockPos, HeraldryBlocks.HERALDRY_TABLE.get().defaultBlockState());
+        return new HeraldryTableMenu(containerId, inventory, blockEntity, HeraldryTableDrafts.blank());
     }
 
     public BlockPos getBlockPos() {
@@ -91,12 +90,25 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         return initialDrafts;
     }
 
-    public void handleExportRequest(ServerPlayer serverPlayer, BlockPos expectedBlockPos, CompoundTag patternTag) {
-        if (!isValidRequest(serverPlayer, expectedBlockPos) || patternTag == null) {
+    public void handleExportChunk(
+            ServerPlayer serverPlayer,
+            BlockPos expectedBlockPos,
+            int transferId,
+            int chunkIndex,
+            int chunkCount,
+            int totalBytes,
+            byte[] chunk
+    ) {
+        if (!isValidRequest(serverPlayer, expectedBlockPos)) {
+            exportCollector.reset();
             return;
         }
 
-        HeraldryPatternData data = HeraldryPatternData.tryFromRootTag(patternTag).orElse(null);
+        HeraldryPatternData data = exportCollector
+                .accept(transferId, chunkIndex, chunkCount, totalBytes, chunk)
+                .flatMap(HeraldryPatternTransfer::decode)
+                .flatMap(HeraldryPatternData::tryFromRootTag)
+                .orElse(null);
         if (data != null && blockEntity.exportPattern(serverPlayer, data)) {
             serverPlayer.level().playSound(
                     null,
@@ -110,14 +122,26 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         }
     }
 
-    public void handleDraftUpdate(ServerPlayer serverPlayer, BlockPos expectedBlockPos, CompoundTag patternTag) {
-        if (!isValidRequest(serverPlayer, expectedBlockPos) || patternTag == null) {
+    public void handleDraftChunk(
+            ServerPlayer serverPlayer,
+            BlockPos expectedBlockPos,
+            int transferId,
+            int chunkIndex,
+            int chunkCount,
+            int totalBytes,
+            byte[] chunk
+    ) {
+        if (!isValidRequest(serverPlayer, expectedBlockPos)) {
+            draftCollector.reset();
             return;
         }
 
-        HeraldryTableDrafts drafts = HeraldryTableDrafts.fromTag(patternTag)
-                .withAuthor(serverPlayer.getGameProfile().getName());
-        blockEntity.setDrafts(drafts);
+        draftCollector
+                .accept(transferId, chunkIndex, chunkCount, totalBytes, chunk)
+                .flatMap(HeraldryPatternTransfer::decode)
+                .flatMap(HeraldryPatternData::tryFromRootTag)
+                .map(data -> data.withAuthor(serverPlayer.getGameProfile().getName()))
+                .ifPresent(blockEntity::setDraftData);
     }
 
     public void handleDraftRequest(ServerPlayer serverPlayer, BlockPos expectedBlockPos) {
@@ -125,10 +149,25 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
             return;
         }
 
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBlockPos(blockPos);
-        buf.writeNbt(blockEntity.getDrafts().toTag());
-        NetworkManager.sendToPlayer(serverPlayer, HeraldryPackets.TABLE_DRAFT_SYNC, buf);
+        HeraldryTableDrafts drafts = blockEntity.getDrafts();
+        ShipPreviewType[] shipTypes = ShipPreviewType.values();
+        for (int index = 0; index < shipTypes.length; index++) {
+            ShipPreviewType shipType = shipTypes[index];
+            byte[] encoded;
+            try {
+                encoded = HeraldryPatternTransfer.encode(drafts.get(shipType).toTag());
+            } catch (java.io.IOException exception) {
+                continue;
+            }
+            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+            buf.writeBlockPos(blockPos);
+            buf.writeUtf(drafts.activeShipType().serializedName(), 16);
+            buf.writeUtf(shipType.serializedName(), 16);
+            buf.writeBoolean(index == 0);
+            buf.writeBoolean(index == shipTypes.length - 1);
+            buf.writeByteArray(encoded);
+            NetworkManager.sendToPlayer(serverPlayer, HeraldryPackets.TABLE_DRAFT_SYNC, buf);
+        }
     }
 
     public void handleSlotAction(ServerPlayer serverPlayer, BlockPos expectedBlockPos, int slot, int action) {

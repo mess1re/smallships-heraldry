@@ -39,7 +39,6 @@ final class SailMeshDefinitionBuilder {
     private static final Map<ShipPreviewType, Definition> DEFINITIONS = new HashMap<>();
     private static final Field MODEL_PART_CUBES = findModelPartField(List.class);
     private static final Field MODEL_PART_CHILDREN = findModelPartField(Map.class);
-    private static final float PAINT_PIXELS_PER_MODEL_UNIT = 15.0F;
     private static final int TILE_PADDING = 1;
 
     private SailMeshDefinitionBuilder() {
@@ -168,8 +167,8 @@ final class SailMeshDefinitionBuilder {
         }
         int maxTileSize = HeraldryPatternData.MESH_FACE_SIZE * 6;
         return new TileSize(
-                Mth.clamp(Mth.ceil(width * PAINT_PIXELS_PER_MODEL_UNIT), 1, maxTileSize),
-                Mth.clamp(Mth.ceil(height * PAINT_PIXELS_PER_MODEL_UNIT), 1, maxTileSize)
+                Mth.clamp(Mth.ceil(width * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT), 1, maxTileSize),
+                Mth.clamp(Mth.ceil(height * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT), 1, maxTileSize)
         );
     }
 

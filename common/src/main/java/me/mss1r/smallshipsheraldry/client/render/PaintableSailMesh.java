@@ -21,6 +21,7 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import java.util.Set;
 
 public final class PaintableSailMesh {
     private static final Map<ShipPreviewType, SailModel> EDITOR_MODELS = new HashMap<>();
+    private static final Map<ShipPreviewType, List<Map<Integer, Face>>> FACE_LOOKUPS = new EnumMap<>(ShipPreviewType.class);
     private static final ThreadLocal<Set<String>> EDITOR_HIDDEN_ELEMENTS = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> EDITOR_ENTITY_SAILS_SUPPRESSED = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> EDITOR_GRID_VISIBLE = new ThreadLocal<>();
@@ -36,6 +38,7 @@ public final class PaintableSailMesh {
     private static final ThreadLocal<Integer> EDITOR_HIGHLIGHT_FACE_INDEX = new ThreadLocal<>();
     private static EditorPickCache lastEditorPickCache;
     private static final float EDITOR_BASE_SCALE = 12.0F;
+    public static final float PAINT_PIXELS_PER_MODEL_UNIT = 15.0F;
     public static final float EDITOR_VERTICAL_OFFSET = 28.0F;
 
     private PaintableSailMesh() {
@@ -117,14 +120,13 @@ public final class PaintableSailMesh {
             return;
         }
 
-        List<Face> faces = new ArrayList<>();
-        for (Face face : definition.facesForState(currentSailState(ship))) {
-            if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
-                continue;
-            }
-            faces.add(face);
-        }
-        SailMeshRenderer.renderPainted(faces, poseStack, vertexConsumer, packedLight);
+        SailMeshRenderer.renderPainted(
+                definition.facesForState(currentSailState(ship)),
+                poseStack,
+                vertexConsumer,
+                packedLight,
+                hiddenElements
+        );
     }
 
     public static void renderOriginal(Ship ship, SailModel sailModel, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
@@ -241,18 +243,20 @@ public final class PaintableSailMesh {
             return Optional.empty();
         }
 
-        List<Face> faces = cachedEditorFaces(ship).orElseGet(() -> editorFaces(ship, left, top, right, bottom, yawDegrees, pitchDegrees, zoom, panX, panY));
-        if (faces.isEmpty()) {
+        SailMeshPicker.Index index = cachedEditorIndex(ship).orElseGet(() -> SailMeshPicker.index(
+                editorFaces(ship, left, top, right, bottom, yawDegrees, pitchDegrees, zoom, panX, panY)
+        ));
+        if (index.faces().isEmpty()) {
             return Optional.empty();
         }
-        return SailMeshPicker.pick(faces, mouseX, mouseY, hiddenElements);
+        return SailMeshPicker.pick(index, mouseX, mouseY, hiddenElements);
     }
 
     public static float projectedPixelScale(Ship ship, Hit hit) {
         if (ship == null || hit == null) {
             return 1.0F;
         }
-        for (Face face : cachedEditorFaces(ship).orElse(List.of())) {
+        for (Face face : cachedEditorIndex(ship).map(SailMeshPicker.Index::faces).orElse(List.of())) {
             if (face.faceIndex() != hit.faceIndex()) {
                 continue;
             }
@@ -264,6 +268,98 @@ public final class PaintableSailMesh {
             return Math.max(0.5F, (horizontal + vertical) * 0.5F);
         }
         return 1.0F;
+    }
+
+    public static List<ScreenPixel> pixelsInSurfaceRect(
+            Ship ship,
+            int stage,
+            Hit start,
+            Hit end,
+            Set<String> selectedElements,
+            Set<String> hiddenElements
+    ) {
+        if (ship == null || start == null || end == null) {
+            return List.of();
+        }
+        List<Face> definitionFaces = facesFor(ship, stage);
+        Face startFace = faceFor(ship, stage, start.faceIndex());
+        Face endFace = faceFor(ship, stage, end.faceIndex());
+        if (startFace == null || endFace == null) {
+            return List.of();
+        }
+
+        int startLocalX = Mth.clamp(start.pixelX() - startFace.slot().x(), 0, startFace.slot().width() - 1);
+        int startLocalY = Mth.clamp(start.pixelY() - startFace.slot().y(), 0, startFace.slot().height() - 1);
+        int endLocalX = Mth.clamp(end.pixelX() - endFace.slot().x(), 0, endFace.slot().width() - 1);
+        int endLocalY = Mth.clamp(end.pixelY() - endFace.slot().y(), 0, endFace.slot().height() - 1);
+        SurfacePoint first = SailClipboardMapper.point(definitionFaces, startFace, startLocalX, startLocalY);
+        SurfacePoint last = SailClipboardMapper.point(definitionFaces, endFace, endLocalX, endLocalY);
+        if (first.componentId() != last.componentId()) {
+            return List.of();
+        }
+
+        float padding = 0.25F / PAINT_PIXELS_PER_MODEL_UNIT;
+        float minU = Math.min(first.u(), last.u()) - padding;
+        float maxU = Math.max(first.u(), last.u()) + padding;
+        float minV = Math.min(first.v(), last.v()) - padding;
+        float maxV = Math.max(first.v(), last.v()) + padding;
+        Optional<SailMeshPicker.Index> cached = cachedEditorIndex(ship);
+        if (cached.isEmpty()) {
+            return List.of();
+        }
+
+        SailMeshPicker.Index index = cached.get();
+        List<ScreenPixel> pixels = new ArrayList<>();
+        for (Face screenFace : index.faces()) {
+            if (hiddenElements != null && hiddenElements.contains(screenFace.elementId())) {
+                continue;
+            }
+            if (selectedElements != null && !selectedElements.isEmpty()
+                    && !selectedElements.contains(screenFace.elementId())) {
+                continue;
+            }
+            Face definitionFace = faceFor(ship, stage, screenFace.faceIndex());
+            if (definitionFace == null) {
+                continue;
+            }
+            AtlasSlot slot = definitionFace.slot();
+            for (int localY = 0; localY < slot.height(); localY++) {
+                for (int localX = 0; localX < slot.width(); localX++) {
+                    SurfacePoint point = SailClipboardMapper.point(
+                            definitionFaces,
+                            definitionFace,
+                            localX,
+                            localY
+                    );
+                    if (point.componentId() != first.componentId()
+                            || point.u() < minU || point.u() > maxU
+                            || point.v() < minV || point.v() > maxV) {
+                        continue;
+                    }
+                    Vector3f screen = SailClipboardMapper.position(screenFace, localX, localY);
+                    Optional<Hit> visible = SailMeshPicker.pick(index, screen.x(), screen.y(), hiddenElements);
+                    if (visible.isEmpty() || visible.get().faceIndex() != screenFace.faceIndex()) {
+                        continue;
+                    }
+                    pixels.add(new ScreenPixel(
+                            new Hit(
+                                    definitionFace.state(),
+                                    definitionFace.elementId(),
+                                    definitionFace.faceIndex(),
+                                    slot.x() + localX,
+                                    slot.y() + localY,
+                                    slot.x(),
+                                    slot.y(),
+                                    slot.width(),
+                                    slot.height()
+                            ),
+                            screen.x(),
+                            screen.y()
+                    ));
+                }
+            }
+        }
+        return List.copyOf(pixels);
     }
 
     private static float screenDistance(Vertex first, Vertex second) {
@@ -285,16 +381,40 @@ public final class PaintableSailMesh {
         }
 
         int state = currentSailState(ship);
+        int transformHash = transformHash(poseStack.last().pose());
+        EditorPickCache cached = lastEditorPickCache;
+        if (cached != null && cached.ship() == ship && cached.state() == state && cached.transformHash() == transformHash) {
+            return;
+        }
         List<Face> faces = SailMeshDefinitionBuilder.collectFaces(sailModel, poseStack, definition, state);
-        lastEditorPickCache = new EditorPickCache(System.identityHashCode(ship), state, List.copyOf(faces));
+        lastEditorPickCache = new EditorPickCache(ship, state, transformHash, SailMeshPicker.index(faces));
     }
 
-    private static Optional<List<Face>> cachedEditorFaces(Ship ship) {
+    private static Optional<SailMeshPicker.Index> cachedEditorIndex(Ship ship) {
         EditorPickCache cache = lastEditorPickCache;
-        if (cache == null || cache.shipIdentity() != System.identityHashCode(ship) || cache.state() != currentSailState(ship)) {
+        if (cache == null || cache.ship() != ship || cache.state() != currentSailState(ship)) {
             return Optional.empty();
         }
-        return Optional.of(cache.faces());
+        return Optional.of(cache.index());
+    }
+
+    private static int transformHash(Matrix4f matrix) {
+        int result = Float.floatToIntBits(matrix.m00());
+        result = 31 * result + Float.floatToIntBits(matrix.m01());
+        result = 31 * result + Float.floatToIntBits(matrix.m02());
+        result = 31 * result + Float.floatToIntBits(matrix.m03());
+        result = 31 * result + Float.floatToIntBits(matrix.m10());
+        result = 31 * result + Float.floatToIntBits(matrix.m11());
+        result = 31 * result + Float.floatToIntBits(matrix.m12());
+        result = 31 * result + Float.floatToIntBits(matrix.m13());
+        result = 31 * result + Float.floatToIntBits(matrix.m20());
+        result = 31 * result + Float.floatToIntBits(matrix.m21());
+        result = 31 * result + Float.floatToIntBits(matrix.m22());
+        result = 31 * result + Float.floatToIntBits(matrix.m23());
+        result = 31 * result + Float.floatToIntBits(matrix.m30());
+        result = 31 * result + Float.floatToIntBits(matrix.m31());
+        result = 31 * result + Float.floatToIntBits(matrix.m32());
+        return 31 * result + Float.floatToIntBits(matrix.m33());
     }
 
     static List<Face> facesFor(Ship ship, int stage) {
@@ -306,6 +426,64 @@ public final class PaintableSailMesh {
             return List.of();
         }
         return definition.facesForState(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1));
+    }
+
+    static Face faceFor(Ship ship, int stage, int faceIndex) {
+        if (ship == null || faceIndex < 0) {
+            return null;
+        }
+        ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
+        List<Map<Integer, Face>> stages = FACE_LOOKUPS.computeIfAbsent(shipType, PaintableSailMesh::buildFaceLookups);
+        return stages.get(Mth.clamp(stage, 0, HeraldryPatternData.STAGE_COUNT - 1)).get(faceIndex);
+    }
+
+    public static Optional<SurfacePoint> surfacePoint(Ship ship, int stage, Hit hit) {
+        if (hit == null) {
+            return Optional.empty();
+        }
+        List<Face> faces = facesFor(ship, stage);
+        Face face = faceFor(ship, stage, hit.faceIndex());
+        if (face == null) {
+            return Optional.empty();
+        }
+        int localX = Mth.clamp(hit.pixelX() - face.slot().x(), 0, Math.max(0, face.slot().width() - 1));
+        int localY = Mth.clamp(hit.pixelY() - face.slot().y(), 0, Math.max(0, face.slot().height() - 1));
+        return Optional.of(SailClipboardMapper.point(faces, face, localX, localY));
+    }
+
+    public static Map<Integer, Integer> mapClipboardPixels(
+            Ship ship,
+            int stage,
+            Hit target,
+            List<ClipboardPixel> clipboard,
+            Set<String> selectedElements,
+            Set<String> hiddenElements
+    ) {
+        Optional<SurfacePoint> targetPoint = surfacePoint(ship, stage, target);
+        if (targetPoint.isEmpty()) {
+            return Map.of();
+        }
+        return SailClipboardMapper.map(
+                facesFor(ship, stage),
+                targetPoint.get(),
+                clipboard,
+                target.faceIndex(),
+                selectedElements,
+                hiddenElements
+        );
+    }
+
+    private static List<Map<Integer, Face>> buildFaceLookups(ShipPreviewType shipType) {
+        SailMeshDefinitionBuilder.Definition definition = definition(shipType);
+        List<Map<Integer, Face>> stages = new ArrayList<>(HeraldryPatternData.STAGE_COUNT);
+        for (int stage = 0; stage < HeraldryPatternData.STAGE_COUNT; stage++) {
+            Map<Integer, Face> faces = new HashMap<>();
+            for (Face face : definition.facesForState(stage)) {
+                faces.put(face.faceIndex(), face);
+            }
+            stages.add(Map.copyOf(faces));
+        }
+        return List.copyOf(stages);
     }
 
     public static boolean fillElementPixels(Ship ship, String elementId, int stage, int[] meshPixels, int color) {
@@ -453,6 +631,15 @@ public final class PaintableSailMesh {
     ) {
     }
 
+    public record SurfacePoint(float u, float v, int componentId) {
+    }
+
+    public record ClipboardPixel(float offsetU, float offsetV, int color) {
+    }
+
+    public record ScreenPixel(Hit hit, double screenX, double screenY) {
+    }
+
     record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
     }
 
@@ -464,7 +651,7 @@ public final class PaintableSailMesh {
         }
     }
 
-    private record EditorPickCache(int shipIdentity, int state, List<Face> faces) {
+    private record EditorPickCache(Ship ship, int state, int transformHash, SailMeshPicker.Index index) {
     }
 
     record AtlasSlot(int index, int x, int y, int width, int height) {
