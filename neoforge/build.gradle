@@ -48,6 +48,23 @@ processResources {
     }
 }
 
+tasks.register("verifyMixinMetadata") {
+    dependsOn processResources
+    def metadataFile = layout.buildDirectory.file("resources/main/META-INF/neoforge.mods.toml")
+    inputs.file(metadataFile)
+
+    doLast {
+        def metadata = metadataFile.get().asFile.getText("UTF-8")
+        if (!metadata.contains('config = "smallshipsheraldry-common.mixins.json"')) {
+            throw new GradleException("NeoForge metadata does not register the common mixin configuration")
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn verifyMixinMetadata
+}
+
 shadowJar {
     exclude "fabric.mod.json"
     exclude "architectury.common.json"

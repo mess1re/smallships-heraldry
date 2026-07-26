@@ -13,6 +13,9 @@ description = '''
 ${mod_description}
 '''
 
+[[mixins]]
+config = "smallshipsheraldry-common.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
