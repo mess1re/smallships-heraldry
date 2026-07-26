@@ -113,12 +113,6 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         clearConfirmation();
     }
 
-    void tick() {
-        if (visible && nameInput != null) {
-            nameInput.tick();
-        }
-    }
-
     void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.flush();
         RenderSystem.disableDepthTest();

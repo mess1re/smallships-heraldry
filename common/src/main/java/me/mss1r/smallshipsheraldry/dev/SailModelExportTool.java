@@ -13,8 +13,6 @@ import com.talhanation.smallships.client.model.sail.GalleySailModel;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import org.joml.Matrix3f;
-import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.io.IOException;
@@ -108,10 +106,7 @@ public final class SailModelExportTool {
                     new ObjCollector(export),
                     0,
                     OverlayTexture.NO_OVERLAY,
-                    1.0F,
-                    1.0F,
-                    1.0F,
-                    1.0F
+                    0xFFFFFFFF
             );
             export.endCube(elementId);
         }
@@ -398,74 +393,56 @@ public final class SailModelExportTool {
 
     private static final class ObjCollector implements VertexConsumer {
         private final Export export;
-        private CapturedVertex current;
-
         private ObjCollector(Export export) {
             this.export = export;
         }
 
         @Override
-        public VertexConsumer vertex(double x, double y, double z) {
-            current = new CapturedVertex((float) x, (float) y, (float) z);
+        public void addVertex(
+                float x,
+                float y,
+                float z,
+                int color,
+                float u,
+                float v,
+                int overlay,
+                int light,
+                float normalX,
+                float normalY,
+                float normalZ
+        ) {
+            export.vertex(x, y, z);
+        }
+
+        @Override
+        public VertexConsumer addVertex(float x, float y, float z) {
             return this;
         }
 
         @Override
-        public VertexConsumer vertex(Matrix4f matrix, float x, float y, float z) {
-            Vector3f pos = new Vector3f(x, y, z);
-            matrix.transformPosition(pos);
-            current = new CapturedVertex(pos.x(), pos.y(), pos.z());
+        public VertexConsumer setColor(int red, int green, int blue, int alpha) {
             return this;
         }
 
         @Override
-        public VertexConsumer color(int red, int green, int blue, int alpha) {
+        public VertexConsumer setUv(float u, float v) {
             return this;
         }
 
         @Override
-        public VertexConsumer uv(float u, float v) {
+        public VertexConsumer setUv1(int u, int v) {
             return this;
         }
 
         @Override
-        public VertexConsumer overlayCoords(int u, int v) {
+        public VertexConsumer setUv2(int u, int v) {
             return this;
         }
 
         @Override
-        public VertexConsumer uv2(int u, int v) {
+        public VertexConsumer setNormal(float x, float y, float z) {
             return this;
         }
-
-        @Override
-        public VertexConsumer normal(float x, float y, float z) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer normal(Matrix3f matrix, float x, float y, float z) {
-            return this;
-        }
-
-        @Override
-        public void endVertex() {
-            if (current != null) {
-                export.vertex(current.x, current.y, current.z);
-                current = null;
-            }
-        }
-
-        @Override
-        public void defaultColor(int red, int green, int blue, int alpha) {
-        }
-
-        @Override
-        public void unsetDefaultColor() {
-        }
-    }
-
-    private record CapturedVertex(float x, float y, float z) {
     }
 
     private static final class MeshElement {

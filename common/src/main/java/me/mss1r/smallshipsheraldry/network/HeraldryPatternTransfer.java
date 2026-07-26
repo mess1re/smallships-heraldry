@@ -39,7 +39,7 @@ public final class HeraldryPatternTransfer {
             return Optional.empty();
         }
         try (DataInputStream input = new DataInputStream(new GZIPInputStream(new ByteArrayInputStream(encoded)))) {
-            return Optional.ofNullable(NbtIo.read(input, new NbtAccounter(MAX_DECOMPRESSED_NBT_BYTES)));
+            return Optional.ofNullable(NbtIo.read(input, NbtAccounter.create(MAX_DECOMPRESSED_NBT_BYTES)));
         } catch (IOException | RuntimeException exception) {
             return Optional.empty();
         }

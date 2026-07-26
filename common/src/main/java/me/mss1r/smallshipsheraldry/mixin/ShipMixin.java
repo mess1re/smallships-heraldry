@@ -29,15 +29,18 @@ public abstract class ShipMixin implements SailBannerAccess {
             SynchedEntityData.defineId(Ship.class, EntityDataSerializers.ITEM_STACK);
 
     @Inject(method = "defineSynchedData", at = @At("RETURN"))
-    private void smallshipsheraldry$defineSynchedData(CallbackInfo ci) {
-        ((Ship) (Object) this).getEntityData().define(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
+    private void smallshipsheraldry$defineSynchedData(SynchedEntityData.Builder builder, CallbackInfo ci) {
+        builder.define(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
     }
 
     @Inject(method = "readAdditionalSaveData", at = @At("RETURN"))
     private void smallshipsheraldry$readAdditionalSaveData(CompoundTag tag, CallbackInfo ci) {
         Ship ship = (Ship) (Object) this;
         if (tag.contains(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, Tag.TAG_COMPOUND)) {
-            ship.setData(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.of(tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG)));
+            ship.setData(
+                    SMALLSHIPSHERALDRY$SAIL_BANNER,
+                    ItemStack.parseOptional(ship.registryAccess(), tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG))
+            );
             smallshipsheraldry$originalSailColor = tag.getString(SMALLSHIPSHERALDRY$ORIGINAL_SAIL_COLOR_TAG);
         } else {
             ship.setData(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
@@ -50,7 +53,7 @@ public abstract class ShipMixin implements SailBannerAccess {
         Ship ship = (Ship) (Object) this;
         ItemStack sailBanner = ship.getData(SMALLSHIPSHERALDRY$SAIL_BANNER);
         if (!sailBanner.isEmpty()) {
-            tag.put(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, sailBanner.save(new CompoundTag()));
+            tag.put(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, sailBanner.save(ship.registryAccess()));
             if (!smallshipsheraldry$originalSailColor.isBlank()) {
                 tag.putString(SMALLSHIPSHERALDRY$ORIGINAL_SAIL_COLOR_TAG, smallshipsheraldry$originalSailColor);
             }

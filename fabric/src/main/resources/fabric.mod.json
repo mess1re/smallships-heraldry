@@ -21,13 +21,11 @@
   "mixins": [
     "smallshipsheraldry-common.mixins.json"
   ],
-  "accessWidener": "smallshipsheraldry.accesswidener",
   "depends": {
-    "fabricloader": ">=0.14.21 <1",
+    "fabricloader": ">=0.16.14 <1",
     "fabric-api": "*",
-    "architectury": ">=9.0.8 <10",
-    "forgeconfigapiport": ">=8.0.3 <9",
-    "minecraft": "1.20.1",
-    "smallships": "2.0.0-b1.4"
+    "architectury": ">=13.0.8 <14",
+    "minecraft": "1.21.1",
+    "smallships": ">=2.0.0-b2.1"
   }
 }

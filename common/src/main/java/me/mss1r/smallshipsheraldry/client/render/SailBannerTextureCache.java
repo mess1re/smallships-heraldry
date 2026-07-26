@@ -8,10 +8,12 @@ import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -62,20 +64,24 @@ public final class SailBannerTextureCache {
         if (sailPattern == null || !sailPattern.is(HeraldryItems.HERALDRY_PATTERN.get())) {
             return null;
         }
-        CompoundTag stackTag = sailPattern.getTag();
-        if (stackTag == null || !stackTag.contains(HeraldryPatternData.ROOT_TAG, Tag.TAG_COMPOUND)) {
+        CustomData customData = sailPattern.get(DataComponents.CUSTOM_DATA);
+        if (customData == null) {
+            return null;
+        }
+        CompoundTag stackTag = customData.copyTag();
+        if (!stackTag.contains(HeraldryPatternData.ROOT_TAG, Tag.TAG_COMPOUND)) {
             return null;
         }
 
         CompoundTag rootTag = stackTag.getCompound(HeraldryPatternData.ROOT_TAG);
         int tagHash = rootTag.hashCode();
         StackPattern cached = STACK_PATTERN_CACHE.get(sailPattern);
-        if (cached != null && cached.rootTag() == rootTag && cached.tagHash() == tagHash) {
+        if (cached != null && cached.customData() == customData && cached.tagHash() == tagHash) {
             return cached.data();
         }
 
         HeraldryPatternData parsed = HeraldryPatternData.fromRootTag(rootTag);
-        STACK_PATTERN_CACHE.put(sailPattern, new StackPattern(rootTag, tagHash, parsed));
+        STACK_PATTERN_CACHE.put(sailPattern, new StackPattern(customData, tagHash, parsed));
         return parsed;
     }
 
@@ -125,6 +131,6 @@ public final class SailBannerTextureCache {
         }
     }
 
-    private record StackPattern(CompoundTag rootTag, int tagHash, HeraldryPatternData data) {
+    private record StackPattern(CustomData customData, int tagHash, HeraldryPatternData data) {
     }
 }

@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ShearsItem;
@@ -39,7 +40,7 @@ public final class SailBannerInteractionHandler {
             }
 
             ItemStack installedPattern = access.smallshipsheraldry$getSailBanner();
-            if (ItemStack.isSameItemSameTags(installedPattern, heldItem)) {
+            if (ItemStack.isSameItemSameComponents(installedPattern, heldItem)) {
                 return InteractionResult.sidedSuccess(ship.level().isClientSide());
             }
 
@@ -73,7 +74,11 @@ public final class SailBannerInteractionHandler {
                 }
                 access.smallshipsheraldry$setOriginalSailColor("");
                 if (!player.isCreative()) {
-                    heldItem.hurtAndBreak(1, player, brokenPlayer -> brokenPlayer.broadcastBreakEvent(interactionHand));
+                    heldItem.hurtAndBreak(
+                            1,
+                            player,
+                            interactionHand == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND
+                    );
                 }
                 playClothSound(ship);
             }

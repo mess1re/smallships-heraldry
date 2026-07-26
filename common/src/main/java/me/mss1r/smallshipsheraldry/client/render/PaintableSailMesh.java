@@ -587,7 +587,7 @@ public final class PaintableSailMesh {
         float centerY = (top + bottom) * 0.5F + EDITOR_VERTICAL_OFFSET + panY;
         float scale = EDITOR_BASE_SCALE * zoom;
         poseStack.translate(centerX, centerY, 220.0D);
-        poseStack.mulPoseMatrix(new Matrix4f().scaling(scale, scale, -scale));
+        poseStack.scale(scale, scale, -scale);
         poseStack.translate(0.0F, 0.05F, 0.0F);
         poseStack.mulPose(new Quaternionf()
                 .rotateZ((float) Math.PI)

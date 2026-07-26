@@ -1,14 +1,12 @@
 package me.mss1r.smallshipsheraldry.client.render;
 
 import com.mojang.blaze3d.platform.Lighting;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.resources.ResourceLocation;
-import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
 import java.util.Set;
@@ -48,14 +46,24 @@ public final class PreviewShipRenderer {
         EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         try {
             guiGraphics.pose().translate(centerX, centerY, 180.0D);
-            guiGraphics.pose().mulPoseMatrix(new Matrix4f().scaling((float) scale, (float) scale, (float) (-scale)));
+            guiGraphics.pose().scale(scale, scale, -scale);
             guiGraphics.pose().translate(0.0F, 0.05F, 0.0F);
             guiGraphics.pose().mulPose(orientation);
             Lighting.setupForEntityInInventory();
             dispatcher.setRenderShadow(false);
             PaintableSailMesh.setEditorEntitySailsSuppressed(true);
             SailBannerOverlayRenderer.setEditorDraftTexture(draftTexture);
-            RenderSystem.runAsFancy(() -> dispatcher.render(ship, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, guiGraphics.pose(), guiGraphics.bufferSource(), LightTexture.FULL_BRIGHT));
+            dispatcher.render(
+                    ship,
+                    0.0D,
+                    0.0D,
+                    0.0D,
+                    0.0F,
+                    1.0F,
+                    guiGraphics.pose(),
+                    guiGraphics.bufferSource(),
+                    LightTexture.FULL_BRIGHT
+            );
             guiGraphics.flush();
         } finally {
             SailBannerOverlayRenderer.clearEditorDraftTexture();

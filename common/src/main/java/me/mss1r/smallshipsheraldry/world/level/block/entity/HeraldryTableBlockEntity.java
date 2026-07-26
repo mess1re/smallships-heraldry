@@ -8,6 +8,7 @@ import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import me.mss1r.smallshipsheraldry.registry.HeraldryMenus;
 import me.mss1r.smallshipsheraldry.world.inventory.HeraldryTableMenu;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -168,16 +169,16 @@ public class HeraldryTableBlockEntity extends BlockEntity implements Container, 
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag) {
-        super.saveAdditional(tag);
-        ContainerHelper.saveAllItems(tag, items);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        ContainerHelper.saveAllItems(tag, items, registries);
         tag.put(DRAFTS_TAG, drafts.toTag());
     }
 
     @Override
-    public void load(CompoundTag tag) {
-        super.load(tag);
-        ContainerHelper.loadAllItems(tag, items);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        ContainerHelper.loadAllItems(tag, items, registries);
         if (tag.contains(DRAFTS_TAG, Tag.TAG_COMPOUND)) {
             drafts = HeraldryTableDrafts.fromTag(tag.getCompound(DRAFTS_TAG));
         } else if (tag.contains(DRAFT_TAG, Tag.TAG_COMPOUND)) {

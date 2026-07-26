@@ -7,9 +7,10 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
     modApi "dev.architectury:architectury:${rootProject.architectury_api_version}"
 
-    // Compile against Small Ships classes from the shared sources without leaking the Fabric jar into Forge runtime.
-    modCompileOnly "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_fabric_modrinth_version}"
+    // Small Ships' NeoForge jar is already in Mojang names; common only needs its API at compile time.
+    compileOnly "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_neoforge_modrinth_version}"
     testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
 }
 
 tasks.named("test") {

@@ -2,7 +2,8 @@
   "parent": "smallshipsheraldry:prepare_heraldry",
   "display": {
     "icon": {
-      "item": "smallshipsheraldry:heraldry_pattern"
+      "count": 1,
+      "id": "smallshipsheraldry:heraldry_pattern"
     },
     "title": {
       "translate": "advancements.smallshipsheraldry.print_pattern.title"
@@ -21,9 +22,7 @@
       "conditions": {
         "items": [
           {
-            "items": [
-              "smallshipsheraldry:heraldry_pattern"
-            ]
+            "items": "smallshipsheraldry:heraldry_pattern"
           }
         ]
       }

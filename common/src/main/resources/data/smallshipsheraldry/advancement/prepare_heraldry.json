@@ -2,7 +2,8 @@
   "parent": "minecraft:adventure/root",
   "display": {
     "icon": {
-      "item": "smallshipsheraldry:heraldry_table"
+      "count": 1,
+      "id": "smallshipsheraldry:heraldry_table"
     },
     "title": {
       "translate": "advancements.smallshipsheraldry.prepare_heraldry.title"
@@ -21,9 +22,7 @@
       "conditions": {
         "items": [
           {
-            "items": [
-              "smallshipsheraldry:heraldry_table"
-            ]
+            "items": "smallshipsheraldry:heraldry_table"
           }
         ]
       }

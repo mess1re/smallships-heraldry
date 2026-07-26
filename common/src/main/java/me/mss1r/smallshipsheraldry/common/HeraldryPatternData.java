@@ -1,8 +1,10 @@
 package me.mss1r.smallshipsheraldry.common;
 
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
@@ -222,7 +224,7 @@ public final class HeraldryPatternData {
     }
 
     public ItemStack writeToStack(ItemStack stack) {
-        stack.getOrCreateTag().put(ROOT_TAG, toTag());
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.put(ROOT_TAG, toTag()));
         return stack;
     }
 
@@ -287,11 +289,15 @@ public final class HeraldryPatternData {
     }
 
     public static Optional<HeraldryPatternData> tryFromStack(ItemStack stack) {
-        if (stack == null || stack.isEmpty() || !stack.hasTag()) {
+        if (stack == null || stack.isEmpty()) {
             return Optional.empty();
         }
-        CompoundTag tag = stack.getTag();
-        if (tag == null || !tag.contains(ROOT_TAG, Tag.TAG_COMPOUND)) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        if (customData == null) {
+            return Optional.empty();
+        }
+        CompoundTag tag = customData.copyTag();
+        if (!tag.contains(ROOT_TAG, Tag.TAG_COMPOUND)) {
             return Optional.empty();
         }
         return tryFromRootTag(tag.getCompound(ROOT_TAG));

@@ -14,8 +14,6 @@ import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.util.Mth;
-import org.joml.Matrix3f;
-import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.lang.reflect.Field;
@@ -201,7 +199,7 @@ final class SailMeshDefinitionBuilder {
             for (int cubeIndex = 0; cubeIndex < cubes.size(); cubeIndex++) {
                 cubes.get(cubeIndex).compile(
                         poseStack.last(), new CubeFaceCollector(state, elementId, cubeIndex, faces),
-                        0, OverlayTexture.NO_OVERLAY, 1.0F, 1.0F, 1.0F, 1.0F
+                        0, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF
                 );
             }
         }
@@ -296,7 +294,6 @@ final class SailMeshDefinitionBuilder {
         private final int cubeIndex;
         private final List<RawFace> faces;
         private final List<CapturedVertex> vertices = new ArrayList<>(4);
-        private CapturedVertex current;
         private int polygonIndex;
 
         private CubeFaceCollector(int state, String elementId, int cubeIndex, List<RawFace> faces) {
@@ -307,76 +304,58 @@ final class SailMeshDefinitionBuilder {
         }
 
         @Override
-        public VertexConsumer vertex(double x, double y, double z) {
-            current = new CapturedVertex((float) x, (float) y, (float) z);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer vertex(Matrix4f matrix, float x, float y, float z) {
-            Vector3f position = new Vector3f(x, y, z);
-            matrix.transformPosition(position);
-            current = new CapturedVertex(position.x(), position.y(), position.z());
-            return this;
-        }
-
-        @Override
-        public VertexConsumer color(int red, int green, int blue, int alpha) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer uv(float u, float v) {
-            if (current != null) {
-                current.u = u;
-                current.v = v;
-            }
-            return this;
-        }
-
-        @Override
-        public VertexConsumer overlayCoords(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer uv2(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer normal(float x, float y, float z) {
-            if (current != null) {
-                current.normal.set(x, y, z);
-            }
-            return this;
-        }
-
-        @Override
-        public VertexConsumer normal(Matrix3f matrix, float x, float y, float z) {
-            Vector3f normal = new Vector3f(x, y, z);
-            matrix.transform(normal);
-            return normal(normal.x(), normal.y(), normal.z());
-        }
-
-        @Override
-        public void endVertex() {
-            if (current != null) {
-                vertices.add(current);
-                current = null;
-                if (vertices.size() == 4) {
-                    flushFace();
-                    vertices.clear();
-                }
+        public void addVertex(
+                float x,
+                float y,
+                float z,
+                int color,
+                float u,
+                float v,
+                int overlay,
+                int light,
+                float normalX,
+                float normalY,
+                float normalZ
+        ) {
+            CapturedVertex vertex = new CapturedVertex(x, y, z);
+            vertex.u = u;
+            vertex.v = v;
+            vertex.normal.set(normalX, normalY, normalZ);
+            vertices.add(vertex);
+            if (vertices.size() == 4) {
+                flushFace();
+                vertices.clear();
             }
         }
 
         @Override
-        public void defaultColor(int red, int green, int blue, int alpha) {
+        public VertexConsumer addVertex(float x, float y, float z) {
+            return this;
         }
 
         @Override
-        public void unsetDefaultColor() {
+        public VertexConsumer setColor(int red, int green, int blue, int alpha) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv(float u, float v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv1(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv2(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setNormal(float x, float y, float z) {
+            return this;
         }
 
         private void flushFace() {

@@ -1,5 +1,5 @@
 plugins {
-    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id "com.gradleup.shadow" version "8.3.11"
 }
 
 architectury {
@@ -20,12 +20,9 @@ dependencies {
     modApi "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
     modApi "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
 
-    common(project(path: ":common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
+    common(project(path: ":common", configuration: "namedElements")) { transitive = false }
+    shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive = false }
 
-    modImplementation "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_fabric_modrinth_version}"
-    // Small Ships uses this API but its Fabric metadata does not declare it.
-    modRuntimeOnly "maven.modrinth:forge-config-api-port:${rootProject.forge_config_api_port_version}"
 }
 
 processResources {
@@ -52,7 +49,6 @@ shadowJar {
 }
 
 remapJar {
-    injectAccessWidener = false
     input.set shadowJar.archiveFile
     dependsOn shadowJar
     archiveClassifier.set null

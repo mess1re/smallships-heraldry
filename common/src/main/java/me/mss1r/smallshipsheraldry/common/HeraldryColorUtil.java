@@ -14,10 +14,10 @@ public final class HeraldryColorUtil {
         double bestDistance = Double.MAX_VALUE;
 
         for (DyeColor dyeColor : DyeColor.values()) {
-            float[] diffuse = dyeColor.getTextureDiffuseColors();
-            int dyeRed = Math.round(diffuse[0] * 255.0F);
-            int dyeGreen = Math.round(diffuse[1] * 255.0F);
-            int dyeBlue = Math.round(diffuse[2] * 255.0F);
+            int diffuse = dyeColor.getTextureDiffuseColor();
+            int dyeRed = (diffuse >> 16) & 0xFF;
+            int dyeGreen = (diffuse >> 8) & 0xFF;
+            int dyeBlue = diffuse & 0xFF;
             double distance = Math.pow(red - dyeRed, 2) + Math.pow(green - dyeGreen, 2) + Math.pow(blue - dyeBlue, 2);
             if (distance < bestDistance) {
                 bestDistance = distance;

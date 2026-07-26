@@ -1,12 +1,11 @@
 package me.mss1r.smallshipsheraldry.world.inventory;
 
 import dev.architectury.networking.NetworkManager;
-import io.netty.buffer.Unpooled;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
-import me.mss1r.smallshipsheraldry.network.HeraldryPackets;
 import me.mss1r.smallshipsheraldry.network.HeraldryPatternTransfer;
+import me.mss1r.smallshipsheraldry.network.TableDraftSyncPayload;
 import me.mss1r.smallshipsheraldry.registry.HeraldryBlocks;
 import me.mss1r.smallshipsheraldry.registry.HeraldryMenus;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
@@ -159,14 +158,14 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
             } catch (java.io.IOException exception) {
                 continue;
             }
-            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-            buf.writeBlockPos(blockPos);
-            buf.writeUtf(drafts.activeShipType().serializedName(), 16);
-            buf.writeUtf(shipType.serializedName(), 16);
-            buf.writeBoolean(index == 0);
-            buf.writeBoolean(index == shipTypes.length - 1);
-            buf.writeByteArray(encoded);
-            NetworkManager.sendToPlayer(serverPlayer, HeraldryPackets.TABLE_DRAFT_SYNC, buf);
+            NetworkManager.sendToPlayer(serverPlayer, new TableDraftSyncPayload(
+                    blockPos,
+                    drafts.activeShipType().serializedName(),
+                    shipType.serializedName(),
+                    index == 0,
+                    index == shipTypes.length - 1,
+                    encoded
+            ));
         }
     }
 

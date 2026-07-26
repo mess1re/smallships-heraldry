@@ -1,15 +1,14 @@
 plugins {
-    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id "com.gradleup.shadow" version "8.3.11"
 }
 
 architectury {
     platformSetupLoomIde()
-    forge()
+    neoForge()
 }
 
 loom {
-    forge {
-        mixinConfig "smallshipsheraldry-common.mixins.json"
+    neoForge {
     }
 }
 
@@ -18,17 +17,15 @@ configurations {
     shadowCommon
     compileClasspath.extendsFrom common
     runtimeClasspath.extendsFrom common
-    developmentForge.extendsFrom common
+    developmentNeoForge.extendsFrom common
 }
 
 dependencies {
-    forge "net.minecraftforge:forge:${rootProject.forge_version}"
-    modApi "dev.architectury:architectury-forge:${rootProject.architectury_api_version}"
+    neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
+    modApi "dev.architectury:architectury-neoforge:${rootProject.architectury_api_version}"
 
-    common(project(path: ":common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive false }
-
-    modImplementation "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_forge_modrinth_version}"
+    common(project(path: ":common", configuration: "namedElements")) { transitive = false }
+    shadowCommon(project(path: ":common", configuration: "transformProductionNeoForge")) { transitive = false }
 }
 
 processResources {
@@ -40,13 +37,13 @@ processResources {
             mod_license: rootProject.mod_license,
             mod_description: rootProject.mod_description,
             loader_version_range: rootProject.loader_version_range,
-            forge_version_range: rootProject.forge_version_range,
+            neoforge_version_range: rootProject.neoforge_version_range,
             minecraft_version_range: rootProject.minecraft_version_range,
             smallships_version_range: rootProject.smallships_version_range
     ]
     inputs.properties replaceProperties
 
-    filesMatching("META-INF/mods.toml") {
+    filesMatching("META-INF/neoforge.mods.toml") {
         expand replaceProperties
     }
 }
@@ -83,7 +80,7 @@ components.java {
 
 publishing {
     publications {
-        mavenForge(MavenPublication) {
+        mavenNeoForge(MavenPublication) {
             artifactId = rootProject.archives_base_name + "-" + project.name
             from components.java
         }

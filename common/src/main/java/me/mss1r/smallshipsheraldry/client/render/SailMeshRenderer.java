@@ -53,13 +53,12 @@ final class SailMeshRenderer {
     static void renderOriginal(PaintableSailMesh.Face face, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight) {
         PoseStack.Pose pose = poseStack.last();
         for (PaintableSailMesh.Vertex vertex : face.vertices()) {
-            vertexConsumer.vertex(pose.pose(), vertex.x(), vertex.y(), vertex.z())
-                    .color(255, 255, 255, 255)
-                    .uv(vertex.originalU(), vertex.originalV())
-                    .overlayCoords(OverlayTexture.NO_OVERLAY)
-                    .uv2(packedLight)
-                    .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
-                    .endVertex();
+            vertexConsumer.addVertex(pose.pose(), vertex.x(), vertex.y(), vertex.z())
+                    .setColor(255, 255, 255, 255)
+                    .setUv(vertex.originalU(), vertex.originalV())
+                    .setOverlay(OverlayTexture.NO_OVERLAY)
+                    .setLight(packedLight)
+                    .setNormal(pose, face.normal().x(), face.normal().y(), face.normal().z());
         }
     }
 
@@ -95,13 +94,12 @@ final class SailMeshRenderer {
             float v,
             int packedLight
     ) {
-        vertexConsumer.vertex(pose.pose(), x, y, z)
-                .color(255, 255, 255, 255)
-                .uv(u, v)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2(packedLight)
-                .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
-                .endVertex();
+        vertexConsumer.addVertex(pose.pose(), x, y, z)
+                .setColor(255, 255, 255, 255)
+                .setUv(u, v)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(packedLight)
+                .setNormal(pose, face.normal().x(), face.normal().y(), face.normal().z());
     }
 
     private static void emitHighlightLine(
@@ -188,10 +186,9 @@ final class SailMeshRenderer {
             int blue
     ) {
         PoseStack.Pose pose = poseStack.last();
-        vertexConsumer.vertex(pose.pose(), x, y, z)
-                .color(red, green, blue, 230)
-                .normal(pose.normal(), lineDirection.x(), lineDirection.y(), lineDirection.z())
-                .endVertex();
+        vertexConsumer.addVertex(pose.pose(), x, y, z)
+                .setColor(red, green, blue, 230)
+                .setNormal(pose, lineDirection.x(), lineDirection.y(), lineDirection.z());
     }
 
     private record GridCorners(

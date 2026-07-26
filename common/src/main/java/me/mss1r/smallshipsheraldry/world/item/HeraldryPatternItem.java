@@ -31,7 +31,7 @@ public class HeraldryPatternItem extends Item {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltipComponents, TooltipFlag isAdvanced) {
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag isAdvanced) {
         HeraldryPatternData data = HeraldryPatternData.fromStack(stack);
         if (!data.author().isBlank()) {
             tooltipComponents.add(Component.translatable("smallshipsheraldry.tooltip.author", data.author()).withStyle(ChatFormatting.GRAY));

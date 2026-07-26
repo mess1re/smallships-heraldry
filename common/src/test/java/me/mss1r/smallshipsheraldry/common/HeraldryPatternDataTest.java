@@ -1,6 +1,12 @@
 package me.mss1r.smallshipsheraldry.common;
 
+import net.minecraft.SharedConstants;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -58,6 +64,36 @@ class HeraldryPatternDataTest {
         assertEquals(3, migrated.paintedPixelCount());
         assertEquals(0xFF112233, migrated.meshAtlasPixelAt(5, 0));
         assertEquals(0xFF445566, migrated.meshAtlasPixelAt(100, 0));
+    }
+
+    @Test
+    void itemComponentRoundTripsWithoutDiscardingOtherCustomData() {
+        int[] pixels = new int[HeraldryPatternData.MESH_PIXEL_COUNT];
+        pixels[42] = 0xFF3366AA;
+        HeraldryPatternData source = HeraldryPatternData.fromMeshPixels(
+                "Painter",
+                ShipPreviewType.DRAKKAR,
+                0xFFCC8844,
+                pixels
+        );
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        ItemStack stack = new ItemStack(Items.PAPER);
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putString("OtherModData", "kept"));
+
+        source.writeToStack(stack);
+
+        HeraldryPatternData decoded = HeraldryPatternData.tryFromStack(stack).orElseThrow();
+        assertEquals(source.author(), decoded.author());
+        assertEquals(source.shipType(), decoded.shipType());
+        assertEquals(source.baseColorArgb(), decoded.baseColorArgb());
+        assertArrayEquals(source.toDenseMeshPixels(), decoded.toDenseMeshPixels());
+        assertEquals(
+                "kept",
+                stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY)
+                        .copyTag()
+                        .getString("OtherModData")
+        );
     }
 
     @Test

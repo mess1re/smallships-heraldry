@@ -4,7 +4,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import dev.architectury.networking.NetworkManager;
-import io.netty.buffer.Unpooled;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.client.HeraldryClientSettings;
 import me.mss1r.smallshipsheraldry.client.render.HeraldryDraftTexture;
@@ -14,8 +13,11 @@ import me.mss1r.smallshipsheraldry.client.render.PreviewShipRenderer;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
-import me.mss1r.smallshipsheraldry.network.HeraldryPackets;
+import me.mss1r.smallshipsheraldry.network.ExportPatternPayload;
 import me.mss1r.smallshipsheraldry.network.HeraldryPatternTransfer;
+import me.mss1r.smallshipsheraldry.network.TableDraftRequestPayload;
+import me.mss1r.smallshipsheraldry.network.TableDraftUpdatePayload;
+import me.mss1r.smallshipsheraldry.network.TableSlotActionPayload;
 import me.mss1r.smallshipsheraldry.world.inventory.HeraldryTableMenu;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
 import net.minecraft.client.Minecraft;
@@ -23,7 +25,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
@@ -42,7 +43,8 @@ import java.util.Optional;
 import java.util.Set;
 
 public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMenu> {
-    private static final ResourceLocation TOOL_ICONS = new ResourceLocation(SmallShipsHeraldry.MOD_ID, "textures/gui/heraldry_tools.png");
+    private static final ResourceLocation TOOL_ICONS =
+            ResourceLocation.fromNamespaceAndPath(SmallShipsHeraldry.MOD_ID, "textures/gui/heraldry_tools.png");
 
     private static final int ELEMENT_X = 10;
     private static final int ELEMENT_Y = 36;
@@ -249,9 +251,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryButton != null) {
             libraryButton.visible = editorMode == EditorMode.PAINT && !libraryPanelVisible() && !helpVisible;
         }
-        if (libraryPanel != null) {
-            libraryPanel.tick();
-        }
         if (session.saveDue(System.currentTimeMillis())) {
             sendDraftUpdate();
         }
@@ -265,7 +264,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (draftTexture != null) {
             draftTexture.uploadIfDirty();
         }
-        renderBackground(guiGraphics);
+        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         if (libraryPanelVisible()) {
             libraryPanel.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -585,28 +584,28 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (libraryPanelVisible()) {
-            return libraryPanel.mouseScrolled(mouseX, mouseY, amount);
+            return libraryPanel.mouseScrolled(mouseX, mouseY, scrollY);
         }
         if (isInsidePreview(mouseX, mouseY)) {
             clearPixelSelectionOverlay();
-            zoomPreviewAt(mouseX, mouseY, amount);
+            zoomPreviewAt(mouseX, mouseY, scrollY);
             return true;
         }
         if (editorMode == EditorMode.PAINT
                 && (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
                 && isInside(mouseX, mouseY, leftPos + 60, topPos + SIZE_Y, 58, 16)) {
-            brushSize = Mth.clamp(brushSize + (int) Math.signum(amount), 1, 8);
+            brushSize = Mth.clamp(brushSize + (int) Math.signum(scrollY), 1, 8);
             return true;
         }
         if (editorMode == EditorMode.PARTS && isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, ELEMENT_HEIGHT)) {
             List<PaintableSailMesh.Element> elements = elements();
             int maxScroll = Math.max(0, elements.size() - visibleElementRows());
-            elementScroll = Mth.clamp(elementScroll - (int) Math.signum(amount), 0, maxScroll);
+            elementScroll = Mth.clamp(elementScroll - (int) Math.signum(scrollY), 0, maxScroll);
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, amount);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -1902,7 +1901,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return;
         }
         HeraldryPatternData current = currentData();
-        if (current == null || !sendPatternTransfer(HeraldryPackets.TABLE_DRAFT_UPDATE, current)) {
+        if (current == null || !sendPatternTransfer(false, current)) {
             return;
         }
         session.markSaved();
@@ -1933,7 +1932,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (data == null) {
             return;
         }
-        if (sendPatternTransfer(HeraldryPackets.EXPORT_PATTERN, data)) {
+        if (sendPatternTransfer(true, data)) {
             session.markSaved();
         }
     }
@@ -1943,11 +1942,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (data == null) {
             return;
         }
-        sendPatternTransfer(HeraldryPackets.TABLE_DRAFT_UPDATE, data);
+        sendPatternTransfer(false, data);
         session.markSaved();
     }
 
-    private boolean sendPatternTransfer(ResourceLocation packetId, HeraldryPatternData data) {
+    private boolean sendPatternTransfer(boolean export, HeraldryPatternData data) {
         byte[] encoded;
         try {
             encoded = HeraldryPatternTransfer.encode(data.toTag());
@@ -1959,14 +1958,16 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         int transferId = ++nextTransferId;
         int chunkCount = HeraldryPatternTransfer.chunkCount(encoded.length);
         for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
-            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-            buf.writeBlockPos(menu.getBlockPos());
-            buf.writeVarInt(transferId);
-            buf.writeVarInt(chunkIndex);
-            buf.writeVarInt(chunkCount);
-            buf.writeVarInt(encoded.length);
-            buf.writeByteArray(HeraldryPatternTransfer.chunk(encoded, chunkIndex));
-            NetworkManager.sendToServer(packetId, buf);
+            byte[] chunk = HeraldryPatternTransfer.chunk(encoded, chunkIndex);
+            if (export) {
+                NetworkManager.sendToServer(new ExportPatternPayload(
+                        menu.getBlockPos(), transferId, chunkIndex, chunkCount, encoded.length, chunk
+                ));
+            } else {
+                NetworkManager.sendToServer(new TableDraftUpdatePayload(
+                        menu.getBlockPos(), transferId, chunkIndex, chunkCount, encoded.length, chunk
+                ));
+            }
         }
         return true;
     }
@@ -1977,9 +1978,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
 
         draftSyncRequested = true;
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBlockPos(menu.getBlockPos());
-        NetworkManager.sendToServer(HeraldryPackets.TABLE_DRAFT_REQUEST, buf);
+        NetworkManager.sendToServer(new TableDraftRequestPayload(menu.getBlockPos()));
     }
 
     public static void handleDraftSync(
@@ -2027,11 +2026,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void sendSlotAction(int slot, int action) {
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeBlockPos(menu.getBlockPos());
-        buf.writeVarInt(slot);
-        buf.writeVarInt(action);
-        NetworkManager.sendToServer(HeraldryPackets.TABLE_SLOT_ACTION, buf);
+        NetworkManager.sendToServer(new TableSlotActionPayload(menu.getBlockPos(), slot, action));
     }
 
     private void rebuildPreviewShip() {

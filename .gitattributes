@@ -1,8 +1,10 @@
 * text=auto
+.gitattributes text eol=lf
 *.java text eol=lf
 *.gradle text eol=lf
 *.properties text eol=lf
 *.json text eol=lf
+*.mcmeta text eol=lf
 *.toml text eol=lf
 *.md text eol=lf
 *.png binary

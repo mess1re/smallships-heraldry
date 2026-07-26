@@ -103,7 +103,7 @@ public final class HeraldryPatternLibrary {
             root.putInt(FORMAT_TAG, FORMAT_VERSION);
             root.put(PATTERN_TAG, data.toTag());
             temporary = Files.createTempFile(directory, ".saving-", ".tmp");
-            NbtIo.writeCompressed(root, temporary.toFile());
+            NbtIo.writeCompressed(root, temporary);
             if (Files.size(temporary) > MAX_FILE_BYTES) {
                 return Result.TOO_LARGE;
             }
@@ -250,7 +250,7 @@ public final class HeraldryPatternLibrary {
             }
             CompoundTag root;
             try (DataInputStream stream = new DataInputStream(new GZIPInputStream(new BufferedInputStream(Files.newInputStream(path))))) {
-                root = NbtIo.read(stream, new NbtAccounter(MAX_NBT_BYTES));
+                root = NbtIo.read(stream, NbtAccounter.create(MAX_NBT_BYTES));
             }
             if (root.getInt(FORMAT_TAG) != FORMAT_VERSION || !root.contains(PATTERN_TAG, Tag.TAG_COMPOUND)) {
                 return Optional.empty();
