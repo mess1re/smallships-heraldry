@@ -163,7 +163,10 @@ public final class HeraldryClientSettings {
         }
     }
 
-    private static float parseFloat(String value, float fallback, float minimum, float maximum) {
+    static float parseFloat(String value, float fallback, float minimum, float maximum) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
         try {
             float parsed = Float.parseFloat(value);
             return Float.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
