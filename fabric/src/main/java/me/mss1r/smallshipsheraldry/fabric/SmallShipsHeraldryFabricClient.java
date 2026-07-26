@@ -10,6 +10,7 @@ public final class SmallShipsHeraldryFabricClient implements ClientModInitialize
     @Override
     public void onInitializeClient() {
         SmallShipsHeraldryClient.init();
+        SmallShipsHeraldryClient.registerScreen();
         ClientPlayNetworking.registerGlobalReceiver(
                 TableDraftSyncPayload.TYPE,
                 (payload, context) -> context.client().execute(
