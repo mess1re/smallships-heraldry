@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -21,30 +22,32 @@ public final class SailBannerInteractionHandler {
             return InteractionResult.PASS;
         }
 
+        Entity entity = ship;
+        boolean clientSide = entity.level().isClientSide();
         SailBannerAccess access = (SailBannerAccess) ship;
         ItemStack heldItem = player.getItemInHand(interactionHand);
 
         if (heldItem.is(HeraldryItems.HERALDRY_PATTERN.get())) {
             HeraldryPatternData patternData = HeraldryPatternData.tryFromStack(heldItem).orElse(null);
             if (patternData == null) {
-                if (!ship.level().isClientSide()) {
+                if (!clientSide) {
                     player.displayClientMessage(Component.translatable("smallshipsheraldry.message.invalid_pattern"), true);
                 }
-                return InteractionResult.sidedSuccess(ship.level().isClientSide());
+                return InteractionResult.sidedSuccess(clientSide);
             }
             if (!patternData.shipType().matches(ship)) {
-                if (!ship.level().isClientSide()) {
+                if (!clientSide) {
                     player.displayClientMessage(Component.translatable("smallshipsheraldry.message.wrong_ship_type", patternData.shipType().getDisplayName()), true);
                 }
-                return InteractionResult.sidedSuccess(ship.level().isClientSide());
+                return InteractionResult.sidedSuccess(clientSide);
             }
 
             ItemStack installedPattern = access.smallshipsheraldry$getSailBanner();
             if (ItemStack.isSameItemSameComponents(installedPattern, heldItem)) {
-                return InteractionResult.sidedSuccess(ship.level().isClientSide());
+                return InteractionResult.sidedSuccess(clientSide);
             }
 
-            if (!ship.level().isClientSide()) {
+            if (!clientSide) {
                 if (!access.smallshipsheraldry$hasSailBanner()) {
                     access.smallshipsheraldry$setOriginalSailColor(ship.getData(Ship.SAIL_COLOR));
                 }
@@ -63,11 +66,11 @@ public final class SailBannerInteractionHandler {
                 playClothSound(ship);
             }
 
-            return InteractionResult.sidedSuccess(ship.level().isClientSide());
+            return InteractionResult.sidedSuccess(clientSide);
         }
 
         if (heldItem.getItem() instanceof ShearsItem && access.smallshipsheraldry$hasSailBanner()) {
-            if (!ship.level().isClientSide()) {
+            if (!clientSide) {
                 access.smallshipsheraldry$setSailBanner(ItemStack.EMPTY);
                 if (access.smallshipsheraldry$hasOriginalSailColor()) {
                     ship.setData(Ship.SAIL_COLOR, access.smallshipsheraldry$getOriginalSailColor());
@@ -83,7 +86,7 @@ public final class SailBannerInteractionHandler {
                 playClothSound(ship);
             }
 
-            return InteractionResult.sidedSuccess(ship.level().isClientSide());
+            return InteractionResult.sidedSuccess(clientSide);
         }
 
         return InteractionResult.PASS;
@@ -100,13 +103,14 @@ public final class SailBannerInteractionHandler {
     }
 
     private static void playClothSound(Ship ship) {
-        ship.level().playSound(
+        Entity entity = ship;
+        entity.level().playSound(
                 null,
-                ship.getX(),
-                ship.getY() + 1.0D,
-                ship.getZ(),
+                entity.getX(),
+                entity.getY() + 1.0D,
+                entity.getZ(),
                 SoundEvents.WOOL_HIT,
-                ship.getSoundSource(),
+                entity.getSoundSource(),
                 1.0F,
                 1.0F
         );

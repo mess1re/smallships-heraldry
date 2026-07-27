@@ -7,6 +7,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -36,10 +37,11 @@ public abstract class ShipMixin implements SailBannerAccess {
     @Inject(method = "readAdditionalSaveData", at = @At("RETURN"))
     private void smallshipsheraldry$readAdditionalSaveData(CompoundTag tag, CallbackInfo ci) {
         Ship ship = (Ship) (Object) this;
+        Entity entity = (Entity) (Object) this;
         if (tag.contains(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, Tag.TAG_COMPOUND)) {
             ship.setData(
                     SMALLSHIPSHERALDRY$SAIL_BANNER,
-                    ItemStack.parseOptional(ship.registryAccess(), tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG))
+                    ItemStack.parseOptional(entity.registryAccess(), tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG))
             );
             smallshipsheraldry$originalSailColor = tag.getString(SMALLSHIPSHERALDRY$ORIGINAL_SAIL_COLOR_TAG);
         } else {
@@ -51,9 +53,10 @@ public abstract class ShipMixin implements SailBannerAccess {
     @Inject(method = "addAdditionalSaveData", at = @At("RETURN"))
     private void smallshipsheraldry$addAdditionalSaveData(CompoundTag tag, CallbackInfo ci) {
         Ship ship = (Ship) (Object) this;
+        Entity entity = (Entity) (Object) this;
         ItemStack sailBanner = ship.getData(SMALLSHIPSHERALDRY$SAIL_BANNER);
         if (!sailBanner.isEmpty()) {
-            tag.put(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, sailBanner.save(ship.registryAccess()));
+            tag.put(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, sailBanner.save(entity.registryAccess()));
             if (!smallshipsheraldry$originalSailColor.isBlank()) {
                 tag.putString(SMALLSHIPSHERALDRY$ORIGINAL_SAIL_COLOR_TAG, smallshipsheraldry$originalSailColor);
             }

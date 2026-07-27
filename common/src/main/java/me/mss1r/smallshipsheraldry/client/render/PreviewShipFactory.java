@@ -12,6 +12,7 @@ import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
 import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 public final class PreviewShipFactory {
@@ -41,10 +42,11 @@ public final class PreviewShipFactory {
         setSailState(ship, sailState);
         ship.setData(Ship.SAIL_COLOR, HeraldryColorUtil.nearestDyeName(data.baseColorArgb()));
         applyPattern(ship, data);
-        ship.setPos(0.0D, 0.0D, 0.0D);
-        ship.setYRot(180.0F);
-        ship.yRotO = ship.getYRot();
-        ship.tickCount = 1;
+        Entity entity = ship;
+        entity.setPos(0.0D, 0.0D, 0.0D);
+        entity.setYRot(180.0F);
+        entity.yRotO = entity.getYRot();
+        entity.tickCount = 1;
         return ship;
     }
 
