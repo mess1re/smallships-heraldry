@@ -206,11 +206,13 @@ public final class PaintableSailMesh {
             return;
         }
 
-        sailModel.setupAnim(ship, 1.0F, 0.0F, -0.1F, 0.0F, 0.0F);
+        SailModelBridge.setupAnim(sailModel, ship, 1.0F);
         guiGraphics.pose().pushPose();
         applySmallShipsSailTransform(guiGraphics.pose());
         try {
-            VertexConsumer baseConsumer = guiGraphics.bufferSource().getBuffer(sailModel.renderType(SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location));
+            VertexConsumer baseConsumer = guiGraphics.bufferSource().getBuffer(
+                    SailModelBridge.renderType(sailModel, SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location)
+            );
             renderOriginal(ship, sailModel, guiGraphics.pose(), baseConsumer, LightTexture.FULL_BRIGHT, hiddenElements);
 
             ItemStack sailPattern = ((SailBannerAccess) ship).smallshipsheraldry$getSailBanner();
@@ -577,7 +579,7 @@ public final class PaintableSailMesh {
         }
 
         PoseStack poseStack = editorPose(left, top, right, bottom, yawDegrees, pitchDegrees, zoom, panX, panY);
-        sailModel.setupAnim(ship, 1.0F, 0.0F, -0.1F, 0.0F, 0.0F);
+        SailModelBridge.setupAnim(sailModel, ship, 1.0F);
         return SailMeshDefinitionBuilder.collectFaces(sailModel, poseStack, definition, currentSailState(ship));
     }
 

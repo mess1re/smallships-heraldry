@@ -71,7 +71,7 @@ public final class SailBannerOverlayRenderer {
             return;
         }
 
-        sailModel.setupAnim(ship, partialTicks, 0.0F, -0.1F, 0.0F, 0.0F);
+        SailModelBridge.setupAnim(sailModel, ship, partialTicks);
         VertexConsumer vertexConsumer = bufferSource.getBuffer(RenderType.entityTranslucent(overlayTexture));
         PaintableSailMesh.render(ship, sailModel, poseStack, vertexConsumer, packedLight, PaintableSailMesh.editorHiddenElements());
     }
@@ -83,9 +83,11 @@ public final class SailBannerOverlayRenderer {
             return;
         }
 
-        sailModel.setupAnim(ship, partialTicks, 0.0F, -0.1F, 0.0F, 0.0F);
+        SailModelBridge.setupAnim(sailModel, ship, partialTicks);
         PaintableSailMesh.captureEditorPickFaces(ship, sailModel, poseStack);
-        VertexConsumer baseConsumer = bufferSource.getBuffer(sailModel.renderType(SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location));
+        VertexConsumer baseConsumer = bufferSource.getBuffer(
+                SailModelBridge.renderType(sailModel, SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location)
+        );
         PaintableSailMesh.renderOriginal(ship, sailModel, poseStack, baseConsumer, packedLight, PaintableSailMesh.editorHiddenElements());
 
         ResourceLocation overlayTexture = EDITOR_DRAFT_TEXTURE.get();

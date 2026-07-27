@@ -79,7 +79,7 @@ final class SailMeshDefinitionBuilder {
         Map<Integer, Map<String, PaintableSailMesh.Element>> elementsByState = new HashMap<>();
         for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
             previewShip.setData(Ship.SAIL_STATE, (byte) state);
-            sailModel.setupAnim(previewShip, 1.0F, 0.0F, -0.1F, 0.0F, 0.0F);
+            SailModelBridge.setupAnim(sailModel, previewShip, 1.0F);
             for (RawFace rawFace : collectRawFaces(sailModel, new PoseStack(), state)) {
                 if (!isPaintableFace(rawFace)) {
                     continue;
@@ -96,7 +96,7 @@ final class SailMeshDefinitionBuilder {
         Map<Integer, List<PaintableSailMesh.Face>> facesByState = new HashMap<>();
         for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
             previewShip.setData(Ship.SAIL_STATE, (byte) state);
-            sailModel.setupAnim(previewShip, 1.0F, 0.0F, -0.1F, 0.0F, 0.0F);
+            SailModelBridge.setupAnim(sailModel, previewShip, 1.0F);
             List<PaintableSailMesh.Face> stateFaces = new ArrayList<>();
             for (RawFace rawFace : collectRawFaces(sailModel, new PoseStack(), state)) {
                 PaintableSailMesh.AtlasSlot slot = faceSlots.get(rawFace.key());
