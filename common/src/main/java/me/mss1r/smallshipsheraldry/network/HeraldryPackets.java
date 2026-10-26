@@ -81,9 +81,7 @@ public final class HeraldryPackets {
                     });
                 }
         );
-        if (Platform.isFabric()) {
-            NetworkManager.registerS2CPayloadType(TableDraftSyncPayload.TYPE, TableDraftSyncPayload.STREAM_CODEC);
-        } else {
+        if (Platform.getEnvironment() == Env.CLIENT) {
             NetworkManager.registerReceiver(
                     NetworkManager.s2c(),
                     TableDraftSyncPayload.TYPE,
@@ -93,6 +91,8 @@ public final class HeraldryPackets {
                             () -> () -> context.queue(() -> HeraldryClientPackets.handleDraftSync(payload))
                     )
             );
+        } else {
+            NetworkManager.registerS2CPayloadType(TableDraftSyncPayload.TYPE, TableDraftSyncPayload.STREAM_CODEC);
         }
     }
 }
