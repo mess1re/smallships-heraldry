@@ -3,8 +3,11 @@ package me.mss1r.smallshipsheraldry.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.talhanation.smallships.client.model.sail.BriggSailModel;
+import com.talhanation.smallships.client.model.sail.CaravelSailModel;
 import com.talhanation.smallships.client.model.sail.CogSailModel;
+import com.talhanation.smallships.client.model.sail.DhowSailModel;
 import com.talhanation.smallships.client.model.sail.DrakkarSailModel;
+import com.talhanation.smallships.client.model.sail.GalleonSailModel;
 import com.talhanation.smallships.client.model.sail.GalleySailModel;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.Ship;
@@ -32,7 +35,10 @@ final class SailMeshDefinitionBuilder {
             ShipPreviewType.COG, CogSailModel::new,
             ShipPreviewType.BRIGG, BriggSailModel::new,
             ShipPreviewType.GALLEY, GalleySailModel::new,
-            ShipPreviewType.DRAKKAR, DrakkarSailModel::new
+            ShipPreviewType.DRAKKAR, DrakkarSailModel::new,
+            ShipPreviewType.CARAVEL, CaravelSailModel::new,
+            ShipPreviewType.DHOW, DhowSailModel::new,
+            ShipPreviewType.GALLEON, GalleonSailModel::new
     );
     private static final Map<ShipPreviewType, Definition> DEFINITIONS = new HashMap<>();
     private static final Field MODEL_PART_CUBES = findModelPartField(List.class);

@@ -1,8 +1,11 @@
 package me.mss1r.smallshipsheraldry.client.render;
 
 import com.talhanation.smallships.world.entity.ship.BriggEntity;
+import com.talhanation.smallships.world.entity.ship.CaravelEntity;
 import com.talhanation.smallships.world.entity.ship.CogEntity;
+import com.talhanation.smallships.world.entity.ship.DhowEntity;
 import com.talhanation.smallships.world.entity.ship.DrakkarEntity;
+import com.talhanation.smallships.world.entity.ship.GalleonEntity;
 import com.talhanation.smallships.world.entity.ship.GalleyEntity;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import me.mss1r.smallshipsheraldry.access.SailBannerAccess;
@@ -37,6 +40,9 @@ public final class PreviewShipFactory {
             case BRIGG -> createBrigg(level);
             case GALLEY -> createGalley(level);
             case DRAKKAR -> createDrakkar(level);
+            case CARAVEL -> createCaravel(level);
+            case DHOW -> createDhow(level);
+            case GALLEON -> createGalleon(level);
         };
 
         setSailState(ship, sailState);
@@ -64,6 +70,18 @@ public final class PreviewShipFactory {
 
     private static Ship createDrakkar(ClientLevel level) {
         return DrakkarEntity.summon(level, 0.0D, 0.0D, 0.0D);
+    }
+
+    private static Ship createCaravel(ClientLevel level) {
+        return CaravelEntity.summon(level, 0.0D, 0.0D, 0.0D);
+    }
+
+    private static Ship createDhow(ClientLevel level) {
+        return DhowEntity.summon(level, 0.0D, 0.0D, 0.0D);
+    }
+
+    private static Ship createGalleon(ClientLevel level) {
+        return GalleonEntity.summon(level, 0.0D, 0.0D, 0.0D);
     }
 
     public static void applyPattern(Ship ship, HeraldryPatternData data) {

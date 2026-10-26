@@ -19,6 +19,10 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
     modApi "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
     modApi "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
+    modRuntimeOnly "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_fabric_modrinth_version}"
+    modRuntimeOnly "maven.modrinth:forge-config-api-port:${rootProject.forgeconfigapiport_fabric_modrinth_version}"
+    runtimeOnly "com.electronwill.night-config:core:3.8.0"
+    runtimeOnly "com.electronwill.night-config:toml:3.8.0"
 
     common(project(path: ":common", configuration: "namedElements")) { transitive = false }
     shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive = false }
@@ -32,7 +36,8 @@ processResources {
             mod_name: rootProject.mod_name,
             mod_author: rootProject.mod_author,
             mod_license: rootProject.mod_license,
-            mod_description: rootProject.mod_description
+            mod_description: rootProject.mod_description,
+            smallships_min_version: rootProject.smallships_min_version
     ]
     inputs.properties replaceProperties
 

@@ -3,13 +3,19 @@ package me.mss1r.smallshipsheraldry.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.talhanation.smallships.client.model.sail.BriggSailModel;
+import com.talhanation.smallships.client.model.sail.CaravelSailModel;
 import com.talhanation.smallships.client.model.sail.CogSailModel;
+import com.talhanation.smallships.client.model.sail.DhowSailModel;
 import com.talhanation.smallships.client.model.sail.DrakkarSailModel;
+import com.talhanation.smallships.client.model.sail.GalleonSailModel;
 import com.talhanation.smallships.client.model.sail.GalleySailModel;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.BriggEntity;
+import com.talhanation.smallships.world.entity.ship.CaravelEntity;
 import com.talhanation.smallships.world.entity.ship.CogEntity;
+import com.talhanation.smallships.world.entity.ship.DhowEntity;
 import com.talhanation.smallships.world.entity.ship.DrakkarEntity;
+import com.talhanation.smallships.world.entity.ship.GalleonEntity;
 import com.talhanation.smallships.world.entity.ship.GalleyEntity;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import com.talhanation.smallships.world.entity.ship.abilities.Sailable;
@@ -32,6 +38,9 @@ public final class SailBannerOverlayRenderer {
         SAIL_MODELS.put(BriggEntity.class, new BriggSailModel());
         SAIL_MODELS.put(GalleyEntity.class, new GalleySailModel());
         SAIL_MODELS.put(DrakkarEntity.class, new DrakkarSailModel());
+        SAIL_MODELS.put(CaravelEntity.class, new CaravelSailModel());
+        SAIL_MODELS.put(DhowEntity.class, new DhowSailModel());
+        SAIL_MODELS.put(GalleonEntity.class, new GalleonSailModel());
     }
 
     private SailBannerOverlayRenderer() {

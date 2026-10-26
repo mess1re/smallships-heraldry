@@ -1,8 +1,11 @@
 package me.mss1r.smallshipsheraldry.common;
 
 import com.talhanation.smallships.world.entity.ship.BriggEntity;
+import com.talhanation.smallships.world.entity.ship.CaravelEntity;
 import com.talhanation.smallships.world.entity.ship.CogEntity;
+import com.talhanation.smallships.world.entity.ship.DhowEntity;
 import com.talhanation.smallships.world.entity.ship.DrakkarEntity;
+import com.talhanation.smallships.world.entity.ship.GalleonEntity;
 import com.talhanation.smallships.world.entity.ship.GalleyEntity;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import net.minecraft.network.chat.Component;
@@ -11,7 +14,10 @@ public enum ShipPreviewType {
     COG("cog"),
     BRIGG("brigg"),
     GALLEY("galley"),
-    DRAKKAR("drakkar");
+    DRAKKAR("drakkar"),
+    CARAVEL("caravel"),
+    DHOW("dhow"),
+    GALLEON("galleon");
 
     private final String serializedName;
 
@@ -33,6 +39,9 @@ public enum ShipPreviewType {
             case BRIGG -> ship instanceof BriggEntity;
             case GALLEY -> ship instanceof GalleyEntity;
             case DRAKKAR -> ship instanceof DrakkarEntity;
+            case CARAVEL -> ship instanceof CaravelEntity;
+            case DHOW -> ship instanceof DhowEntity;
+            case GALLEON -> ship instanceof GalleonEntity;
         };
     }
 
@@ -64,6 +73,15 @@ public enum ShipPreviewType {
         }
         if (ship instanceof DrakkarEntity) {
             return DRAKKAR;
+        }
+        if (ship instanceof CaravelEntity) {
+            return CARAVEL;
+        }
+        if (ship instanceof DhowEntity) {
+            return DHOW;
+        }
+        if (ship instanceof GalleonEntity) {
+            return GALLEON;
         }
         return COG;
     }

@@ -6,6 +6,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.Ship;
+import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.access.SailBannerAccess;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
@@ -42,6 +43,27 @@ public final class PaintableSailMesh {
     public static final float EDITOR_VERTICAL_OFFSET = 28.0F;
 
     private PaintableSailMesh() {
+    }
+
+    public static void verifyModelCompatibility() {
+        for (ShipPreviewType shipType : ShipPreviewType.values()) {
+            SailMeshDefinitionBuilder.Definition definition = definition(shipType);
+            if (definition.isEmpty()) {
+                throw new IllegalStateException("No paintable sail geometry found for " + shipType.serializedName());
+            }
+            for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
+                if (definition.facesForState(state).isEmpty()) {
+                    throw new IllegalStateException(
+                            "No paintable sail geometry found for " + shipType.serializedName() + " stage " + state
+                    );
+                }
+            }
+            SmallShipsHeraldry.LOGGER.info(
+                    "Verified paintable sail geometry for {} ({} atlas faces)",
+                    shipType.serializedName(),
+                    definition.faceSlotsByKey().size()
+            );
+        }
     }
 
     public static void setEditorHiddenElements(Set<String> hiddenElements) {

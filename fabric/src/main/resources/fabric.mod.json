@@ -26,6 +26,6 @@
     "fabric-api": "*",
     "architectury": ">=13.0.8 <14",
     "minecraft": "1.21.1",
-    "smallships": ">=2.0.0-b2.1"
+    "smallships": ">=${smallships_min_version}"
   }
 }

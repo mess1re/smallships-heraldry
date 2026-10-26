@@ -7,8 +7,11 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.talhanation.smallships.client.model.sail.BriggSailModel;
+import com.talhanation.smallships.client.model.sail.CaravelSailModel;
 import com.talhanation.smallships.client.model.sail.CogSailModel;
+import com.talhanation.smallships.client.model.sail.DhowSailModel;
 import com.talhanation.smallships.client.model.sail.DrakkarSailModel;
+import com.talhanation.smallships.client.model.sail.GalleonSailModel;
 import com.talhanation.smallships.client.model.sail.GalleySailModel;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -45,7 +48,10 @@ public final class SailModelExportTool {
                 "cog", CogSailModel::new,
                 "brigg", BriggSailModel::new,
                 "galley", GalleySailModel::new,
-                "drakkar", DrakkarSailModel::new
+                "drakkar", DrakkarSailModel::new,
+                "caravel", CaravelSailModel::new,
+                "dhow", DhowSailModel::new,
+                "galleon", GalleonSailModel::new
         );
 
         JsonObject manifest = new JsonObject();
