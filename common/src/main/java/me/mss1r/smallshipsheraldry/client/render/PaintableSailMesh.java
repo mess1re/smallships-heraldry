@@ -380,6 +380,10 @@ public final class PaintableSailMesh {
         lastEditorPickCache = new EditorPickCache(ship, state, transformHash, SailMeshPicker.index(faces));
     }
 
+    public static void clearEditorPickCache() {
+        lastEditorPickCache = null;
+    }
+
     public static void setEditorGuiScale(float scale) {
         EDITOR_GUI_SCALE.set(scale);
     }

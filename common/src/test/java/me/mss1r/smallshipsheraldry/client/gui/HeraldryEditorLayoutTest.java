@@ -8,6 +8,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeraldryEditorLayoutTest {
     @Test
+    void wrappedHintsCannotReachTheFooter() {
+        for (int height : new int[] {324, 360, 480, 720}) {
+            var layout = new HeraldryEditorLayout(640, height, 1);
+            for (int y : new int[] {152, 180, 248}) {
+                int lines = layout.textLinesBeforeFooter(y);
+                assertTrue(lines > 0);
+                assertTrue(y + lines * 10 <= layout.footerY() - 6);
+                assertTrue(y + (lines + 1) * 10 > layout.footerY() - 6);
+            }
+            assertEquals(0, layout.textLinesBeforeFooter(layout.footerY()));
+            assertEquals(0, layout.textLinesBeforeFooter(layout.height()));
+        }
+    }
+
+    @Test
     void hitRegionsIncludeTopLeftAndExcludeBottomRight() {
         assertTrue(HeraldryEditorLayout.isInside(10, 20, 10, 20, 18, 18));
         assertTrue(HeraldryEditorLayout.isInside(27.999, 37.999, 10, 20, 18, 18));

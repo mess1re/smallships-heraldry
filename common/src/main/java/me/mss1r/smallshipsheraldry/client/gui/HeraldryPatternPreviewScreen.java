@@ -1,6 +1,7 @@
 package me.mss1r.smallshipsheraldry.client.gui;
 
 import com.talhanation.smallships.world.entity.ship.Ship;
+import me.mss1r.smallshipsheraldry.client.render.PaintableSailMesh;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipFactory;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipRenderer;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
@@ -54,6 +55,12 @@ public class HeraldryPatternPreviewScreen extends Screen {
                 0.0F,
                 62.0F
         );
+    }
+
+    @Override
+    public void removed() {
+        PaintableSailMesh.clearEditorPickCache();
+        super.removed();
     }
 
     @Override

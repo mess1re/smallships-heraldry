@@ -34,6 +34,10 @@ record HeraldryEditorLayout(int width, int height, float scale) {
     int slotY() { return footerY() + 1; }
     float previewScale() { return Math.min(previewWidth() / 252F, previewHeight() / 190F); }
 
+    int textLinesBeforeFooter(int y) {
+        return Math.max(0, (footerY() - 6 - y) / 10);
+    }
+
     static boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }

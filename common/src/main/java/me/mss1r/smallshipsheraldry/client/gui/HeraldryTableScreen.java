@@ -69,6 +69,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private static final int STROKE_Y = 244;
     private static final int SYMMETRY_Y = 270;
     private static final int FILL_MODE_Y = 222;
+    private static final int FILL_HINT_Y = 248;
 
     private HeraldryEditorLayout layout = new HeraldryEditorLayout(HeraldryEditorLayout.MIN_WIDTH, HeraldryEditorLayout.MIN_HEIGHT, 1);
     private boolean partsListVisible = true;
@@ -346,6 +347,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (libraryPanel != null) {
             libraryPanel.close();
         }
+        PaintableSailMesh.clearEditorPickCache();
         super.removed();
     }
 
@@ -726,13 +728,26 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.mode"), x, y0 + 210, HeraldryGuiTheme.INK, false);
             drawChoiceControl(guiGraphics, x, y0 + FILL_MODE_Y, 88,
                     Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_short"));
-            drawWrapped(guiGraphics, Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_hint"), x, y0 + 248, 88);
+            drawWrapped(guiGraphics, Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_hint"), x, y0 + FILL_HINT_Y, 88);
         }
     }
 
     private void drawWrapped(GuiGraphics graphics, Component text, int x, int y, int width) {
-        for (FormattedCharSequence line : font.split(text, width)) {
-            graphics.drawString(font, line, x, y, HeraldryGuiTheme.MUTED_INK, false);
+        List<FormattedCharSequence> lines = font.split(text, width);
+        int visible = Math.min(lines.size(), layout.textLinesBeforeFooter(y - topPos));
+        for (int index = 0; index < visible; index++) {
+            FormattedCharSequence line = lines.get(index);
+            if (index == visible - 1 && visible < lines.size()) {
+                StringBuilder plain = new StringBuilder();
+                line.accept((characterIndex, style, codePoint) -> {
+                    plain.appendCodePoint(codePoint);
+                    return true;
+                });
+                String clipped = font.plainSubstrByWidth(plain.toString(), Math.max(0, width - font.width("...")));
+                graphics.drawString(font, clipped + "...", x, y, HeraldryGuiTheme.MUTED_INK, false);
+            } else {
+                graphics.drawString(font, line, x, y, HeraldryGuiTheme.MUTED_INK, false);
+            }
             y += 10;
         }
     }
@@ -1568,6 +1583,13 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return;
         }
         if (editorMode != EditorMode.PAINT) {
+            return;
+        }
+        if (activeTool == PaintTool.FILL
+                && (isInside(mouseX, mouseY, leftPos + rightX() + 4, topPos + FILL_MODE_Y, 88, 18)
+                || isInside(mouseX, mouseY, leftPos + rightX() + 4, topPos + FILL_HINT_Y,
+                88, layout.textLinesBeforeFooter(FILL_HINT_Y) * 10))) {
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_hint"), mouseX, mouseY);
             return;
         }
         if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
