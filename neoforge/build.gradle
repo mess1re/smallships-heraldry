@@ -32,6 +32,12 @@ dependencies {
 
     common(project(path: ":common", configuration: "namedElements")) { transitive = false }
     shadowCommon(project(path: ":common", configuration: "transformProductionNeoForge")) { transitive = false }
+    testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
+}
+
+tasks.named("test") {
+    useJUnitPlatform()
 }
 
 processResources {
@@ -61,8 +67,10 @@ tasks.register("verifyMixinMetadata") {
 
     doLast {
         def metadata = metadataFile.get().asFile.getText("UTF-8")
-        if (!metadata.contains('config = "smallshipsheraldry-common.mixins.json"')) {
-            throw new GradleException("NeoForge metadata does not register the common mixin configuration")
+        for (def config : ["smallshipsheraldry-common.mixins.json", "smallshipsheraldry-neoforge.mixins.json"]) {
+            if (!metadata.contains('config = "' + config + '"')) {
+                throw new GradleException("NeoForge metadata does not register " + config)
+            }
         }
     }
 }
