@@ -35,7 +35,10 @@ public final class SmallShipsHeraldryClient {
         HeraldryClientPackets.register();
         registerScreen();
         RenderTypeRegistry.register(RenderType.cutout(), HeraldryBlocks.HERALDRY_TABLE.get());
-        ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> SailBannerTextureCache.clear());
+        ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> {
+            SailBannerTextureCache.clear();
+            PaintableSailMesh.clearEditorPickCache();
+        });
         ClientTickEvent.CLIENT_PRE.register(client -> SailBannerTextureCache.tick());
         ReloadListenerRegistry.register(PackType.CLIENT_RESOURCES,
                 (ResourceManagerReloadListener) manager -> SailBannerTextureCache.clear(),
