@@ -15,7 +15,6 @@ dependencies {
 
 tasks.named("test") {
     useJUnitPlatform()
-    classpath += sourceSets.main.compileClasspath
 }
 
 processResources {
