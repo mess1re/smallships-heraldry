@@ -6,22 +6,24 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
+import static me.mss1r.smallshipsheraldry.client.gui.HeraldryEditorLayout.isInside;
+
 final class HeraldryColorPicker {
-    private static final int COLOR_Y = 26;
-    private static final int COLOR_WIDTH = 62;
+    private static final int COLOR_Y = 61;
+    private static final int COLOR_WIDTH = 68;
     private static final int COLOR_HEIGHT = 52;
     private static final int HUE_WIDTH = 8;
-    private static final int OPACITY_Y = 80;
+    private static final int OPACITY_Y = 120;
     private static final int OPACITY_HEIGHT = 5;
-    private static final int CURRENT_COLOR_Y = 88;
+    private static final int CURRENT_COLOR_Y = 134;
     private static final int CURRENT_COLOR_SIZE = 14;
-    private static final int HEX_Y = 88;
-    private static final int HEX_WIDTH = 62;
+    private static final int HEX_Y = 134;
+    private static final int HEX_WIDTH = 70;
     private static final int HEX_HEIGHT = 14;
-    private static final int CUSTOM_Y = 106;
-    private static final int SWATCH_Y = 118;
+    private static final int CUSTOM_Y = 222;
+    private static final int SWATCH_Y = 158;
     private static final int SWATCH_SIZE = 8;
-    private static final int SWATCH_GAP = 2;
+    private static final int SWATCH_GAP = 3;
     private static final int SWATCH_COLUMNS = 8;
 
     private static final int[] BASE_COLORS = {
@@ -34,9 +36,9 @@ final class HeraldryColorPicker {
     private static boolean customColorsLoaded;
 
     private final Font font;
-    private final int panelX;
+    private int panelX;
     private final int panelWidth;
-    private PaperEditBox hexInput;
+    private HeraldryEditBox hexInput;
     private int left;
     private int top;
     private float hue;
@@ -48,6 +50,7 @@ final class HeraldryColorPicker {
     private boolean pickingHue;
     private boolean pickingOpacity;
     private boolean syncingHexInput;
+    private boolean paletteVisible;
 
     HeraldryColorPicker(Font font, int panelX, int panelWidth) {
         this.font = font;
@@ -56,10 +59,15 @@ final class HeraldryColorPicker {
         ensureCustomColorsLoaded();
     }
 
-    PaperEditBox init(int left, int top) {
+    void setPanelX(int panelX) {
+        this.panelX = panelX;
+    }
+
+    HeraldryEditBox init(int left, int top) {
         this.left = left;
         this.top = top;
-        hexInput = new PaperEditBox(
+        paletteVisible = false;
+        hexInput = new HeraldryEditBox(
                 font,
                 left + hexX() + 3,
                 top + HEX_Y + 2,
@@ -129,7 +137,7 @@ final class HeraldryColorPicker {
         int hueX = hueX();
         int opacityX = opacityX();
         int opacityWidth = opacityWidth();
-        guiGraphics.fill(left + colorX - 1, top + COLOR_Y - 1, left + colorX + COLOR_WIDTH + 1, top + COLOR_Y + COLOR_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
+        HeraldryGuiTheme.drawColorFrame(guiGraphics, left + colorX - 1, top + COLOR_Y - 1, COLOR_WIDTH + 2, COLOR_HEIGHT + 2, false);
         for (int x = 0; x < COLOR_WIDTH; x += 2) {
             for (int y = 0; y < COLOR_HEIGHT; y += 2) {
                 float localSaturation = x / (float) (COLOR_WIDTH - 1);
@@ -138,7 +146,7 @@ final class HeraldryColorPicker {
                 guiGraphics.fill(left + colorX + x, top + COLOR_Y + y, left + colorX + x + 2, top + COLOR_Y + y + 2, fieldColor);
             }
         }
-        guiGraphics.fill(left + hueX - 1, top + COLOR_Y - 1, left + hueX + HUE_WIDTH + 1, top + COLOR_Y + COLOR_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
+        HeraldryGuiTheme.drawColorFrame(guiGraphics, left + hueX - 1, top + COLOR_Y - 1, HUE_WIDTH + 2, COLOR_HEIGHT + 2, false);
         for (int y = 0; y < COLOR_HEIGHT; y++) {
             float localHue = Math.min(0.995F, y / (float) COLOR_HEIGHT);
             int hueColor = 0xFF000000 | Mth.hsvToRgb(localHue, 1.0F, 1.0F);
@@ -160,49 +168,31 @@ final class HeraldryColorPicker {
         guiGraphics.fill(markerOpacityX, top + OPACITY_Y - 2, markerOpacityX + 2, top + OPACITY_Y + OPACITY_HEIGHT + 2, 0xFFFFFFFF);
 
         int currentColorX = panelX + 4;
-        guiGraphics.fill(left + currentColorX - 1, top + CURRENT_COLOR_Y - 1, left + currentColorX + CURRENT_COLOR_SIZE + 1, top + CURRENT_COLOR_Y + CURRENT_COLOR_SIZE + 1, 0xFF07101D);
+        HeraldryGuiTheme.drawColorFrame(guiGraphics, left + currentColorX - 1, top + CURRENT_COLOR_Y - 1, CURRENT_COLOR_SIZE + 2, CURRENT_COLOR_SIZE + 2, false);
         drawChecker(guiGraphics, left + currentColorX, top + CURRENT_COLOR_Y, CURRENT_COLOR_SIZE, CURRENT_COLOR_SIZE);
         guiGraphics.fill(left + currentColorX, top + CURRENT_COLOR_Y, left + currentColorX + CURRENT_COLOR_SIZE, top + CURRENT_COLOR_Y + CURRENT_COLOR_SIZE, color);
-        guiGraphics.fill(left + hexX() - 1, top + HEX_Y - 1, left + hexX() + HEX_WIDTH + 1, top + HEX_Y + HEX_HEIGHT + 1, isInputFocused() ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
-        guiGraphics.fill(left + hexX(), top + HEX_Y, left + hexX() + HEX_WIDTH, top + HEX_Y + HEX_HEIGHT, HeraldryGuiTheme.PAPER);
-        drawCustomSwatches(guiGraphics);
+        HeraldryGuiTheme.drawField(guiGraphics, left + hexX() - 1, top + HEX_Y - 1, HEX_WIDTH + 2, HEX_HEIGHT + 2, isInputFocused());
         drawBaseSwatches(guiGraphics);
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button, boolean shiftDown) {
-        if (button != 0 && button != 1) {
+    boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != 0) {
             return false;
         }
-        if (button == 0 && isInside(mouseX, mouseY, left + colorX(), top + COLOR_Y, COLOR_WIDTH, COLOR_HEIGHT)) {
+        if (isInside(mouseX, mouseY, left + colorX(), top + COLOR_Y, COLOR_WIDTH, COLOR_HEIGHT)) {
             pickingColor = true;
             setColorFromField(mouseX, mouseY);
             return true;
         }
-        if (button == 0 && isInside(mouseX, mouseY, left + hueX(), top + COLOR_Y, HUE_WIDTH, COLOR_HEIGHT)) {
+        if (isInside(mouseX, mouseY, left + hueX(), top + COLOR_Y, HUE_WIDTH, COLOR_HEIGHT)) {
             pickingHue = true;
             setHueFromBar(mouseY);
             return true;
         }
-        if (button == 0 && isInside(mouseX, mouseY, left + opacityX(), top + OPACITY_Y, opacityWidth(), OPACITY_HEIGHT)) {
+        if (isInside(mouseX, mouseY, left + opacityX(), top + OPACITY_Y, opacityWidth(), OPACITY_HEIGHT)) {
             pickingOpacity = true;
             setOpacityFromBar(mouseX);
             return true;
-        }
-        for (int index = 0; index < SWATCH_COLUMNS; index++) {
-            int x = left + panelX + 4 + index * (SWATCH_SIZE + SWATCH_GAP);
-            int y = top + CUSTOM_Y;
-            if (isInside(mouseX, mouseY, x, y, SWATCH_SIZE, SWATCH_SIZE)) {
-                if (button == 1 || shiftDown || CUSTOM_COLORS[index] == 0) {
-                    CUSTOM_COLORS[index] = color;
-                    HeraldryClientSettings.saveCustomColors(CUSTOM_COLORS);
-                } else {
-                    setColor(CUSTOM_COLORS[index]);
-                }
-                return true;
-            }
-        }
-        if (button != 0) {
-            return false;
         }
         for (int index = 0; index < BASE_COLORS.length; index++) {
             int column = index % SWATCH_COLUMNS;
@@ -215,6 +205,52 @@ final class HeraldryColorPicker {
             }
         }
         return false;
+    }
+
+    boolean isPaletteVisible() {
+        return paletteVisible;
+    }
+
+    void togglePalette() {
+        paletteVisible = !paletteVisible;
+        hexInput.setFocused(false);
+    }
+
+    void closePalette() {
+        paletteVisible = false;
+    }
+
+    void renderPalette(GuiGraphics graphics) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        HeraldryGuiTheme.drawWindow(graphics, left + panelX - 4, top + 214, 104, 72);
+        drawCustomSwatches(graphics);
+        int y = top + 239;
+        for (var line : font.split(Component.translatable("smallshipsheraldry.tooltip.saved_colors"), 88)) {
+            graphics.drawString(font, line, left + panelX + 4, y, HeraldryGuiTheme.MUTED_INK, false);
+            y += 10;
+        }
+        graphics.flush();
+        graphics.pose().popPose();
+    }
+
+    void paletteClicked(double mouseX, double mouseY, int button, boolean shiftDown) {
+        if (button == 0 || button == 1) {
+            for (int index = 0; index < SWATCH_COLUMNS; index++) {
+                int x = left + panelX + 4 + index * (SWATCH_SIZE + SWATCH_GAP);
+                int y = top + CUSTOM_Y;
+                if (isInside(mouseX, mouseY, x, y, SWATCH_SIZE, SWATCH_SIZE)) {
+                    if (button == 1 || shiftDown || CUSTOM_COLORS[index] == 0) {
+                        CUSTOM_COLORS[index] = color;
+                        HeraldryClientSettings.saveCustomColors(CUSTOM_COLORS);
+                    } else {
+                        setColor(CUSTOM_COLORS[index]);
+                    }
+                    return;
+                }
+            }
+        }
+        paletteVisible = false;
     }
 
     boolean mouseDragged(double mouseX, double mouseY) {
@@ -243,7 +279,7 @@ final class HeraldryColorPicker {
         int x = left + opacityX();
         int y = top + OPACITY_Y;
         int width = opacityWidth();
-        guiGraphics.fill(x - 1, y - 1, x + width + 1, y + OPACITY_HEIGHT + 1, HeraldryGuiTheme.FRAME_DARK);
+        HeraldryGuiTheme.drawColorFrame(guiGraphics, x - 1, y - 1, width + 2, OPACITY_HEIGHT + 2, false);
         drawChecker(guiGraphics, x, y, width, OPACITY_HEIGHT);
         int rgb = color & 0x00FFFFFF;
         for (int localX = 0; localX < width; localX++) {
@@ -259,9 +295,9 @@ final class HeraldryColorPicker {
             int swatchColor = CUSTOM_COLORS[index];
             boolean empty = swatchColor == 0;
             boolean selected = swatchColor != 0 && swatchColor == color;
-            guiGraphics.fill(x - 1, y - 1, x + SWATCH_SIZE + 1, y + SWATCH_SIZE + 1, selected ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
+            HeraldryGuiTheme.drawColorFrame(guiGraphics, x - 1, y - 1, SWATCH_SIZE + 2, SWATCH_SIZE + 2, selected);
             if (empty) {
-                guiGraphics.fill(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE, HeraldryGuiTheme.PAPER_ALT);
+                HeraldryGuiTheme.drawRow(guiGraphics, x, y, SWATCH_SIZE, SWATCH_SIZE, false, false);
                 int centerX = x + SWATCH_SIZE / 2;
                 int centerY = y + SWATCH_SIZE / 2;
                 guiGraphics.fill(centerX - 2, centerY, centerX + 3, centerY + 1, 0xFF6E7F96);
@@ -281,7 +317,7 @@ final class HeraldryColorPicker {
             int y = top + SWATCH_Y + row * (SWATCH_SIZE + SWATCH_GAP);
             int swatchColor = BASE_COLORS[index];
             boolean selected = (swatchColor & 0x00FFFFFF) == (color & 0x00FFFFFF);
-            guiGraphics.fill(x - 1, y - 1, x + SWATCH_SIZE + 1, y + SWATCH_SIZE + 1, selected ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
+            HeraldryGuiTheme.drawColorFrame(guiGraphics, x - 1, y - 1, SWATCH_SIZE + 2, SWATCH_SIZE + 2, selected);
             guiGraphics.fill(x, y, x + SWATCH_SIZE, y + SWATCH_SIZE, swatchColor);
         }
     }
@@ -381,7 +417,7 @@ final class HeraldryColorPicker {
     }
 
     private int hueX() {
-        return colorX() + COLOR_WIDTH + 6;
+        return colorX() + COLOR_WIDTH + 8;
     }
 
     private int opacityX() {
@@ -396,7 +432,4 @@ final class HeraldryColorPicker {
         return panelX + 22;
     }
 
-    private static boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
-    }
 }

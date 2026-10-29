@@ -1,102 +1,97 @@
 package me.mss1r.smallshipsheraldry.client.gui;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.math.Axis;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import dev.architectury.networking.NetworkManager;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
 import me.mss1r.smallshipsheraldry.client.HeraldryClientSettings;
+import me.mss1r.smallshipsheraldry.client.gui.HeraldryPaintController.FillMode;
+import me.mss1r.smallshipsheraldry.client.gui.HeraldryPaintController.PaintTool;
+import me.mss1r.smallshipsheraldry.client.gui.HeraldryPaintController.StrokeMode;
 import me.mss1r.smallshipsheraldry.client.render.HeraldryDraftTexture;
+import me.mss1r.smallshipsheraldry.client.render.GuiScissor;
 import me.mss1r.smallshipsheraldry.client.render.PaintableSailMesh;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipFactory;
+import me.mss1r.smallshipsheraldry.client.render.PreviewShipFraming;
 import me.mss1r.smallshipsheraldry.client.render.PreviewShipRenderer;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
-import me.mss1r.smallshipsheraldry.common.HeraldryTableDrafts;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
-import me.mss1r.smallshipsheraldry.network.ExportPatternPayload;
-import me.mss1r.smallshipsheraldry.network.HeraldryPatternTransfer;
-import me.mss1r.smallshipsheraldry.network.TableDraftRequestPayload;
-import me.mss1r.smallshipsheraldry.network.TableDraftUpdatePayload;
-import me.mss1r.smallshipsheraldry.network.TableSlotActionPayload;
 import me.mss1r.smallshipsheraldry.world.inventory.HeraldryTableMenu;
 import me.mss1r.smallshipsheraldry.world.level.block.entity.HeraldryTableBlockEntity;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import static me.mss1r.smallshipsheraldry.client.gui.HeraldryEditorLayout.isInside;
 
 public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMenu> {
     private static final ResourceLocation TOOL_ICONS =
             ResourceLocation.fromNamespaceAndPath(SmallShipsHeraldry.MOD_ID, "textures/gui/heraldry_tools.png");
+    private static final ResourceLocation CRAFTING_TEXTURE = ResourceLocation.withDefaultNamespace("textures/gui/container/crafting_table.png");
 
-    private static final int ELEMENT_X = 10;
-    private static final int ELEMENT_Y = 36;
+    private static final int ELEMENT_X = 38;
+    private static final int ELEMENT_Y = HeraldryEditorLayout.PREVIEW_Y;
     private static final int ELEMENT_WIDTH = 116;
-    private static final int ELEMENT_HEIGHT = 210;
     private static final int ELEMENT_ROW_HEIGHT = 13;
-    private static final int MODE_TAB_X = ELEMENT_X - 2;
-    private static final int MODE_TAB_Y = 20;
-    private static final int MODE_TAB_WIDTH = 40;
-    private static final int MODE_TAB_HEIGHT = 13;
+    private static final int MODE_TAB_X = 142;
+    private static final int MODE_TAB_Y = 7;
+    private static final int MODE_TAB_WIDTH = 72;
+    private static final int MODE_TAB_HEIGHT = 16;
 
-    private static final int PREVIEW_X = 136;
-    private static final int PREVIEW_Y = 36;
-    private static final int PREVIEW_WIDTH = 226;
-    private static final int PREVIEW_HEIGHT = 160;
+    private static final int PREVIEW_Y = HeraldryEditorLayout.PREVIEW_Y;
 
-    private static final int RIGHT_X = 374;
-    private static final int RIGHT_WIDTH = 88;
-    private static final int HELP_SIZE = 12;
-    private static final int HELP_MARGIN = 5;
-    private static final int HELP_Y = 5;
-    private static final int TOOL_X = ELEMENT_X;
-    private static final int TOOL_Y = 42;
-    private static final int TOOL_WIDTH = 18;
-    private static final int TOOL_HEIGHT = 18;
-    private static final int TOOL_GAP = 4;
+    private static final int RIGHT_WIDTH = HeraldryEditorLayout.RIGHT_WIDTH;
+    private static final int HELP_SIZE = 14;
+    private static final int HELP_MARGIN = 8;
+    private static final int HELP_Y = 7;
+    private static final int TOOL_X = 10;
+    private static final int TOOL_Y = HeraldryEditorLayout.PREVIEW_Y;
+    private static final int TOOL_WIDTH = 20;
+    private static final int TOOL_HEIGHT = 20;
+    private static final int TOOL_GAP = 2;
     private static final int TOOL_TEXTURE_WIDTH = 144;
-    private static final int SETTINGS_LABEL_X = ELEMENT_X;
-    private static final int SIZE_Y = 68;
-    private static final int STROKE_Y = 88;
-    private static final int SYMMETRY_Y = 108;
-    private static final int FILL_MODE_Y = 68;
-    private static final int SCOPE_ACTION_Y = 164;
-    private static final int LIBRARY_BUTTON_Y = 188;
+    private static final int SIZE_Y = 222;
+    private static final int STROKE_Y = 244;
+    private static final int SYMMETRY_Y = 270;
+    private static final int FILL_MODE_Y = 222;
+
+    private HeraldryEditorLayout layout = new HeraldryEditorLayout(HeraldryEditorLayout.MIN_WIDTH, HeraldryEditorLayout.MIN_HEIGHT, 1);
+    private boolean partsListVisible = true;
 
     private final HeraldryEditorSession session = new HeraldryEditorSession();
+    private final HeraldryEditorSurface surface = new EditorSurface();
+    private final HeraldryEditorEdits edits = new EditorEdits();
+    private final HeraldrySelectionController selection = new HeraldrySelectionController(session, surface, edits);
+    private final HeraldryPaintController paint = new HeraldryPaintController(session, surface, edits,
+            color -> this.colorPicker.setColor(color));
+    private final HeraldryDraftSync draftSync;
+    private final HeraldryElementSelection parts = new HeraldryElementSelection();
+    private final HeraldryChoicePopup choices = new HeraldryChoicePopup();
     private HeraldryDraftTexture draftTexture;
     private Ship previewShip;
-    private final Map<String, Set<String>> hiddenElementsByContext = new HashMap<>();
-    private final Map<String, Set<String>> selectedElementsByContext = new HashMap<>();
-    private Set<String> hiddenElements = new LinkedHashSet<>();
-    private Set<String> selectedElementIds = new LinkedHashSet<>();
+    private PreviewShipFraming framing;
+    private ShipPreviewType framedType;
     private HeraldryColorPicker colorPicker;
-    private PaperButton printButton;
-    private PaperButton libraryButton;
+    private HeraldryButton printButton;
+    private HeraldryButton libraryButton;
     private HeraldryLibraryPanel libraryPanel;
     private int previewStage = 4;
-    private float previewYaw = 180.0F;
-    private float previewPitch = -10.0F;
-    private float previewZoom = 1.0F;
-    private float previewPanX = 0.0F;
-    private float previewPanY = 0.0F;
+    private final HeraldryPreviewCamera camera = new HeraldryPreviewCamera();
     private PaintTool activeTool = PaintTool.BRUSH;
     private EditorMode editorMode = EditorMode.PAINT;
     private StrokeMode strokeMode = StrokeMode.FREEHAND;
@@ -104,68 +99,65 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private int brushSize = 1;
     private boolean mirrorVertical;
     private boolean mirrorHorizontal;
-    private int elementScroll;
-    private int selectionAnchorIndex = -1;
-    private boolean paintingPreview;
-    private boolean temporaryPicker;
     private boolean rotatingPreview;
     private boolean panningPreview;
-    private boolean strokeUndoCaptured;
-    private PaintableSailMesh.Hit strokeStartHit;
-    private PaintableSailMesh.Hit lastStrokeHit;
-    private double strokeStartScreenX;
-    private double strokeStartScreenY;
-    private double strokeEndScreenX;
-    private double strokeEndScreenY;
-    private boolean selectingPixels;
-    private boolean pixelSelectionActive;
-    private PaintableSailMesh.Hit selectionStartHit;
-    private PaintableSailMesh.Hit selectionEndHit;
-    private List<PaintableSailMesh.ScreenPixel> surfaceSelection = List.of();
-    private SelectionClipboard clipboard;
-    private boolean pasteActive;
-    private boolean movingPaste;
-    private int pasteX;
-    private int pasteY;
-    private PaintableSailMesh.Hit pasteTargetHit;
-    private Map<Integer, Integer> pasteReplacements = Map.of();
-    private final Set<Integer> pastePreviewIndices = new LinkedHashSet<>();
     private boolean gridVisible = true;
     private boolean helpVisible;
+    private int helpScroll;
+    private int helpMaxScroll;
+    private boolean actionsVisible;
+    private float uiScale = 1.0F;
     private double lastMouseX;
     private double lastMouseY;
     private boolean editorSettingsLoaded;
-    private boolean draftSyncRequested;
-    private int nextTransferId;
-    private HeraldryTableDrafts pendingDraftSync = HeraldryTableDrafts.blank();
     private Component statusMessage;
     private long statusMessageUntil;
     private long clearConfirmationUntil;
 
     public HeraldryTableScreen(HeraldryTableMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        this.imageWidth = 470;
-        this.imageHeight = 260;
-        this.titleLabelX = ELEMENT_X;
-        this.titleLabelY = 10;
-        this.inventoryLabelY = 30000;
+        draftSync = new HeraldryDraftSync(menu.getBlockPos(), session, NetworkManager::sendToServer, this::showStatus);
+        this.imageWidth = layout.width();
+        this.imageHeight = layout.height();
     }
+
+    private int previewX() { return layout.previewX(); }
+    private int previewWidth() { return layout.previewWidth(); }
+    private int previewHeight() { return layout.previewHeight(); }
+    private int rightX() { return layout.rightX(); }
+    private int footerY() { return layout.footerY(); }
+    private float fittedZoom() { return framing == null ? layout.previewScale() : framing.fitZoom(previewWidth(), previewHeight()); }
+    private float previewZoom() { return camera.zoom() * fittedZoom(); }
+    private org.joml.Vector3f framingOffset() {
+        return framing == null ? new org.joml.Vector3f() : framing.centerOffset(camera.yaw(), camera.pitch(), previewZoom());
+    }
+    private float previewPanX() { return camera.panX() + framingOffset().x; }
+    private float previewPanY() { return camera.panY() + framingOffset().y; }
+    private boolean elementListVisible() { return editorMode == EditorMode.PARTS && partsListVisible; }
 
     @Override
     protected void init() {
+        int viewportWidth = minecraft.getWindow().getGuiScaledWidth();
+        int viewportHeight = minecraft.getWindow().getGuiScaledHeight();
+        float previousPreviewScale = fittedZoom();
+        layout = HeraldryEditorLayout.create(viewportWidth, viewportHeight, minecraft.getWindow().getGuiScale());
+        camera.rescalePan(fittedZoom() / previousPreviewScale);
+        uiScale = layout.scale();
+        imageWidth = layout.width();
+        imageHeight = layout.height();
+        width = (int) (viewportWidth / uiScale);
+        height = (int) (viewportHeight / uiScale);
         super.init();
-        paintingPreview = false;
-        temporaryPicker = false;
+        choices.close();
+        actionsVisible = false;
+        paint.cancel();
         rotatingPreview = false;
         panningPreview = false;
-        selectingPixels = false;
-        movingPaste = false;
-        strokeUndoCaptured = false;
-        strokeStartHit = null;
-        lastStrokeHit = null;
+        selection.release();
         if (colorPicker == null) {
-            colorPicker = new HeraldryColorPicker(font, RIGHT_X, RIGHT_WIDTH);
+            colorPicker = new HeraldryColorPicker(font, rightX(), RIGHT_WIDTH);
         }
+        colorPicker.setPanelX(rightX());
         if (!editorSettingsLoaded) {
             HeraldryClientSettings.EditorSettings settings = HeraldryClientSettings.loadEditorSettings();
             colorPicker.setColor(settings.brushColor());
@@ -178,13 +170,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             mirrorHorizontal = settings.mirrorHorizontal();
             gridVisible = settings.gridVisible();
             previewStage = settings.previewStage();
-            previewYaw = settings.previewYaw();
-            previewPitch = settings.previewPitch();
-            previewZoom = settings.previewZoom();
+            camera.restore(settings.previewYaw(), settings.previewPitch(), settings.previewZoom());
             editorSettingsLoaded = true;
         }
         session.initialize(menu.getInitialDrafts());
-        switchElementContext();
+        parts.switchContext(session.shipType(), previewStage);
         if (draftTexture == null) {
             try {
                 draftTexture = new HeraldryDraftTexture("table", session.pixels());
@@ -194,28 +184,32 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
         }
         rebuildPreviewShip();
-        requestDraftSync();
+        draftSync.request();
 
         int x0 = leftPos;
         int y0 = topPos;
-        PaperEditBox colorInput = colorPicker.init(x0, y0);
+        HeraldryEditBox colorInput = colorPicker.init(x0, y0 - 16);
         colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT && !libraryPanelVisible());
         addRenderableWidget(colorInput);
 
-        int previewCenter = x0 + PREVIEW_X + PREVIEW_WIDTH / 2;
-        int controlY = y0 + 206;
-        addRenderableWidget(new PaperButton(x0 + imageWidth - HELP_SIZE - HELP_MARGIN, y0 + HELP_Y, HELP_SIZE, HELP_SIZE, Component.literal("?"), button -> helpVisible = !helpVisible));
-        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + 12, controlY, 20, 18, Component.literal("<"), button -> changePreviewType(session.shipType().previous())));
-        addRenderableWidget(new PaperButton(x0 + PREVIEW_X + PREVIEW_WIDTH - 32, controlY, 20, 18, Component.literal(">"), button -> changePreviewType(session.shipType().next())));
-        addRenderableWidget(new PaperButton(previewCenter - 62, controlY, 24, 18, Component.literal("S<"), button -> changePreviewStage(previewStage - 1)));
-        addRenderableWidget(new PaperButton(previewCenter + 38, controlY, 24, 18, Component.literal("S>"), button -> changePreviewStage(previewStage + 1)));
+        int controlY = y0 + layout.navigationY();
+        addRenderableWidget(new HeraldryButton(x0 + imageWidth - HELP_SIZE - HELP_MARGIN, y0 + HELP_Y, HELP_SIZE, HELP_SIZE, Component.literal("?"), button -> helpVisible = !helpVisible));
+        addRenderableWidget(new HeraldryButton(x0 + layout.shipPreviousX(), controlY, 20, 18, Component.literal("<"), button -> changePreviewType(session.shipType().previous())));
+        addRenderableWidget(new HeraldryButton(x0 + layout.shipNextX(), controlY, 20, 18, Component.literal(">"), button -> changePreviewType(session.shipType().next())));
+        addRenderableWidget(new HeraldryButton(x0 + layout.stagePreviousX(), controlY, 22, 18, Component.literal("S<"), button -> changePreviewStage(previewStage - 1)));
+        addRenderableWidget(new HeraldryButton(x0 + layout.stageNextX(), controlY, 22, 18, Component.literal("S>"), button -> changePreviewStage(previewStage + 1)));
         if (libraryPanel == null) {
             libraryPanel = new HeraldryLibraryPanel(font, new LibraryController());
         }
-        libraryPanel.init(x0, y0);
-        libraryButton = addRenderableWidget(new PaperButton(x0 + ELEMENT_X, y0 + LIBRARY_BUTTON_Y, ELEMENT_WIDTH, 17,
+        libraryPanel.init(x0, y0, imageWidth, imageHeight);
+        libraryButton = addRenderableWidget(new HeraldryButton(x0 + 10, y0 + footerY(), 86, 18,
                 Component.translatable("smallshipsheraldry.button.library"), button -> openLibrary()));
-        printButton = addRenderableWidget(new PaperButton(x0 + RIGHT_X + 4, y0 + 230, 82, 18, Component.translatable("smallshipsheraldry.button.export"), button -> exportPattern()));
+        addRenderableWidget(new HeraldryButton(x0 + 102, y0 + footerY(), 104, 18,
+                Component.translatable("smallshipsheraldry.button.actions"), button -> {
+                    actionsVisible = !actionsVisible;
+                    colorPicker.closePalette();
+                }));
+        printButton = addRenderableWidget(new HeraldryButton(x0 + rightX() + 4, y0 + footerY(), 88, 18, Component.translatable("smallshipsheraldry.button.export"), button -> exportPattern()));
     }
 
     @Override
@@ -228,14 +222,21 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (!libraryPanelVisible() && !helpVisible) {
             drawPreview(guiGraphics, x0, y0);
         } else {
-            HeraldryGuiTheme.drawPreviewInset(guiGraphics, x0 + PREVIEW_X - 4, y0 + PREVIEW_Y - 4, PREVIEW_WIDTH + 8, PREVIEW_HEIGHT + 8);
+            HeraldryGuiTheme.drawPreviewInset(guiGraphics, x0 + previewX() - 1, y0 + PREVIEW_Y - 1, previewWidth() + 2, previewHeight() + 2);
+        }
+        if (elementListVisible()) {
+            HeraldryGuiTheme.drawInset(guiGraphics, x0 + ELEMENT_X - 1, y0 + ELEMENT_Y - 1, ELEMENT_WIDTH + 2, previewHeight() + 2);
+            drawElementRows(guiGraphics, x0, y0);
         }
         drawRightPanel(guiGraphics, x0, y0);
         drawTableSlots(guiGraphics, x0, y0);
 
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.preview"), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 18, HeraldryGuiTheme.INK);
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.stage", previewStage + 1), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 211, HeraldryGuiTheme.MUTED_INK);
-        drawCenteredNoShadow(guiGraphics, session.shipType().getDisplayName(), x0 + PREVIEW_X + PREVIEW_WIDTH / 2, y0 + 230, HeraldryGuiTheme.SELECTED);
+        guiGraphics.drawString(font, font.plainSubstrByWidth(title.getString(), MODE_TAB_X - 20), x0 + 10, y0 + 10, HeraldryGuiTheme.INK, false);
+        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.stage_short", previewStage + 1),
+                x0 + layout.stageCenterX(), y0 + layout.navigationY() + 5, HeraldryGuiTheme.MUTED_INK);
+        Component shipName = Component.literal(font.plainSubstrByWidth(session.shipType().getDisplayName().getString(), layout.shipNameWidth()));
+        drawCenteredNoShadow(guiGraphics, shipName, x0 + layout.shipNameX() + layout.shipNameWidth() / 2,
+                y0 + layout.navigationY() + 5, HeraldryGuiTheme.SELECTED);
     }
 
     @Override
@@ -246,26 +247,43 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     public void containerTick() {
         super.containerTick();
         if (printButton != null) {
-            printButton.active = !menu.getPaperStack().isEmpty() && menu.getResultStack().isEmpty();
+            printButton.active = !draftSync.isLoading() && !menu.getPaperStack().isEmpty() && menu.getResultStack().isEmpty();
         }
         if (libraryButton != null) {
-            libraryButton.visible = editorMode == EditorMode.PAINT && !libraryPanelVisible() && !helpVisible;
+            libraryButton.visible = !libraryPanelVisible() && !helpVisible;
         }
         if (session.saveDue(System.currentTimeMillis())) {
-            sendDraftUpdate();
+            draftSync.save();
         }
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        int scaledX = (int) (mouseX / uiScale);
+        int scaledY = (int) (mouseY / uiScale);
+        graphics.pose().pushPose();
+        graphics.pose().scale(uiScale, uiScale, 1.0F);
+        try {
+            renderEditor(graphics, scaledX, scaledY, partialTick);
+            graphics.flush();
+        } finally {
+            graphics.pose().popPose();
+        }
+    }
+
+    private void renderEditor(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
-        colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT && !libraryPanelVisible() && !helpVisible);
+        colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT && !libraryPanelVisible() && !helpVisible && !actionsVisible);
         if (draftTexture != null) {
             draftTexture.uploadIfDirty();
         }
         renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Slots use the editor layout; inventory actions are sent explicitly, not through vanilla dragging.
+        renderBg(guiGraphics, partialTick, mouseX, mouseY);
+        for (var child : children()) {
+            if (child instanceof Renderable widget) widget.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
         if (libraryPanelVisible()) {
             libraryPanel.render(guiGraphics, mouseX, mouseY, partialTick);
             return;
@@ -274,17 +292,37 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             drawHelpPopupAboveEverything(guiGraphics);
             return;
         }
-        if (statusMessage != null && System.currentTimeMillis() < statusMessageUntil) {
-            drawCenteredNoShadow(guiGraphics, statusMessage, width / 2, topPos + imageHeight + 6, 0xFFFF7777);
+        if (actionsVisible) {
+            drawActionsPopup(guiGraphics);
+            return;
         }
-        renderTooltip(guiGraphics, mouseX, mouseY);
+        if (colorPicker.isPaletteVisible()) {
+            colorPicker.renderPalette(guiGraphics);
+            return;
+        }
+        if (choices.isOpen()) {
+            choices.render(guiGraphics, font);
+            return;
+        }
+        if (statusMessage != null && System.currentTimeMillis() < statusMessageUntil) {
+            Component clipped = Component.literal(font.plainSubstrByWidth(statusMessage.getString(), previewWidth() - 16));
+            int messageY = topPos + PREVIEW_Y + previewHeight() - 14;
+            guiGraphics.fill(leftPos + previewX() + 4, messageY - 2, leftPos + layout.previewRight() - 4, messageY + 10, 0xCC151A20);
+            drawCenteredNoShadow(guiGraphics, clipped, leftPos + previewX() + previewWidth() / 2, messageY, 0xFFFF7777);
+        }
         renderTableSlotTooltip(guiGraphics, mouseX, mouseY);
         renderEditorTooltip(guiGraphics, mouseX, mouseY);
     }
 
     @Override
+    public void onClose() {
+        paint.release();
+        // The server accepts draft updates only while this menu is still open.
+        draftSync.saveBeforeClose(super::onClose);
+    }
+
+    @Override
     public void removed() {
-        sendDraftUpdate();
         HeraldryClientSettings.saveEditorSettings(new HeraldryClientSettings.EditorSettings(
                 colorPicker.color(),
                 activeTool.label(),
@@ -296,11 +334,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 mirrorHorizontal,
                 gridVisible,
                 previewStage,
-                previewYaw,
-                previewPitch,
-                previewZoom
+                camera.yaw(),
+                camera.pitch(),
+                camera.zoom()
         ));
-        closeClipboard();
+        selection.closeClipboard();
         if (draftTexture != null) {
             draftTexture.close();
             draftTexture = null;
@@ -313,14 +351,37 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (draftSync.isLoading()) return true;
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (libraryPanelVisible()) {
             return libraryPanel.mouseClicked(mouseX, mouseY, button, hasShiftDown());
+        }
+        if (choices.isOpen()) {
+            choices.mouseClicked(mouseX, mouseY, button);
+            return true;
         }
         if (helpVisible && !isInside(mouseX, mouseY, leftPos + imageWidth - HELP_SIZE - HELP_MARGIN, topPos + HELP_Y, HELP_SIZE, HELP_SIZE)) {
             helpVisible = false;
             return true;
         }
+        if (actionsVisible) {
+            handleActionsClick(mouseX, mouseY, button);
+            return true;
+        }
+        if (colorPicker.isPaletteVisible()) {
+            colorPicker.paletteClicked(mouseX, mouseY, button, hasShiftDown());
+            return true;
+        }
+        if (getFocused() != null && getChildAt(mouseX, mouseY).orElse(null) != getFocused()) {
+            setFocused(null);
+        }
         if (handleModeTabClick(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (editorMode == EditorMode.PARTS && button == 0
+                && isInside(mouseX, mouseY, leftPos + TOOL_X, topPos + TOOL_Y, TOOL_WIDTH, TOOL_HEIGHT)) {
+            partsListVisible = !partsListVisible;
             return true;
         }
         if (handleTableSlotClick(mouseX, mouseY, button)) {
@@ -341,7 +402,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
         if (isInsidePreview(mouseX, mouseY) && (button == 0 || button == 1 || button == 2)) {
             if (button == 1) {
-                clearPixelSelectionOverlay();
+                selection.release();
                 if (hasShiftDown()) {
                     panningPreview = true;
                 } else {
@@ -350,7 +411,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             if (button == 2) {
-                clearPixelSelectionOverlay();
+                selection.release();
                 panningPreview = true;
                 return true;
             }
@@ -361,68 +422,46 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 return true;
             }
             if (activeTool == PaintTool.SELECT) {
-                return beginPixelSelection(mouseX, mouseY);
+                return selection.beginPixelSelection(mouseX, mouseY);
             }
-            temporaryPicker = hasAltDown();
-            if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) && strokeMode == StrokeMode.LINE && !temporaryPicker) {
-                Optional<PaintableSailMesh.Hit> hit = pickAtPreview(mouseX, mouseY, hiddenElements);
-                if (hit.isEmpty() || !isHitInSelection(hit.get())) {
-                    return true;
-                }
-                paintingPreview = true;
-                strokeUndoCaptured = false;
-                strokeStartHit = hit.get();
-                lastStrokeHit = hit.get();
-                strokeStartScreenX = mouseX;
-                strokeStartScreenY = mouseY;
-                strokeEndScreenX = mouseX;
-                strokeEndScreenY = mouseY;
-                return true;
-            }
-            paintingPreview = activeTool.drags() && !temporaryPicker;
-            strokeUndoCaptured = false;
-            return useToolOnPreview(mouseX, mouseY);
+            return paint.begin(mouseX, mouseY, new HeraldryPaintController.Settings(
+                    activeTool, strokeMode, fillMode, brushSize, mirrorVertical, mirrorHorizontal, colorPicker.color()), hasAltDown());
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        var child = getChildAt(mouseX, mouseY);
+        if (child.isPresent() && child.get().mouseClicked(mouseX, mouseY, button)) {
+            setFocused(child.get());
+            if (button == 0) setDragging(true);
+            return true;
+        }
+        setFocused(null);
+        return false;
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
+        dragX /= uiScale;
+        dragY /= uiScale;
         if (libraryPanelVisible()) {
             return libraryPanel.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
+        if (helpVisible || actionsVisible || colorPicker.isPaletteVisible() || choices.isOpen()) return true;
         if (colorPicker.mouseDragged(mouseX, mouseY)) {
             return true;
         }
-        if (selectingPixels && button == 0) {
-            updatePixelSelection(mouseX, mouseY);
-            return true;
-        }
-        if (movingPaste && button == 0) {
-            movePaste(mouseX, mouseY);
+        if (button == 0 && selection.drag(mouseX, mouseY)) {
             return true;
         }
         if (rotatingPreview && button == 1) {
-            previewYaw = (previewYaw + (float) dragX * 1.4F) % 360.0F;
-            previewPitch = Mth.clamp(previewPitch + (float) dragY * 1.2F, -80.0F, 80.0F);
+            camera.rotate(dragX, dragY);
             return true;
         }
         if (panningPreview && (button == 1 || button == 2)) {
-            previewPanX += (float) dragX;
-            previewPanY += (float) dragY;
+            camera.pan(dragX, dragY);
             return true;
         }
-        if (paintingPreview && button == 0) {
-            if (strokeMode == StrokeMode.LINE && !temporaryPicker) {
-                strokeEndScreenX = mouseX;
-                strokeEndScreenY = mouseY;
-                Optional<PaintableSailMesh.Hit> hit = pickAtPreview(mouseX, mouseY, hiddenElements);
-                if (hit.isPresent() && isHitInSelection(hit.get())) {
-                    lastStrokeHit = hit.get();
-                }
-                return true;
-            }
-            useToolOnPreview(mouseX, mouseY);
+        if (button == 0 && paint.drag(mouseX, mouseY)) {
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -430,56 +469,61 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (libraryPanelVisible()) {
             return libraryPanel.mouseReleased(button);
         }
-        boolean completedPaintStroke = paintingPreview && button == 0;
-        boolean completedLine = completedPaintStroke && strokeMode == StrokeMode.LINE && strokeStartHit != null && !temporaryPicker;
-        if (completedLine) {
-            applyLineStroke();
-        }
+        if (button == 0) paint.release();
         if (button == 0 || button == 1 || button == 2) {
-            paintingPreview = false;
+            paint.cancel();
             rotatingPreview = false;
             panningPreview = false;
-            selectingPixels = false;
-            movingPaste = false;
+            selection.release();
             colorPicker.mouseReleased();
-            strokeUndoCaptured = false;
-            temporaryPicker = false;
-            strokeStartHit = null;
-            lastStrokeHit = null;
-        }
-        if (completedPaintStroke && !completedLine) {
-            commitPaintBuffer();
         }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (draftSync.isLoading()) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE || minecraft.options.keyInventory.matches(keyCode, scanCode)) onClose();
+            return true;
+        }
         if (libraryPanelVisible()) {
             return libraryPanel.keyPressed(keyCode, scanCode, modifiers);
+        }
+        if (choices.isOpen()) {
+            choices.keyPressed(keyCode);
+            return true;
+        }
+        if (helpVisible) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_F1) helpVisible = false;
+            return true;
+        }
+        if (actionsVisible || colorPicker.isPaletteVisible()) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                actionsVisible = false;
+                colorPicker.closePalette();
+            }
+            return true;
         }
         if (colorPicker.isInputFocused()) {
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
-        if (helpVisible && keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            helpVisible = false;
-            return true;
-        }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_C) {
-            copyPixelSelection(false);
+            selection.copyPixelSelection(false);
             return true;
         }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_X) {
-            copyPixelSelection(true);
+            selection.copyPixelSelection(true);
             return true;
         }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_V) {
             setActiveTool(PaintTool.SELECT);
             editorMode = EditorMode.PAINT;
-            beginPaste();
+            selection.beginPaste();
             return true;
         }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_Z) {
@@ -490,26 +534,25 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
             return true;
         }
-        if (pasteActive && keyCode == GLFW.GLFW_KEY_ENTER) {
-            commitPaste();
+        if (selection.isPasting() && keyCode == GLFW.GLFW_KEY_ENTER) {
+            selection.commitPaste();
             return true;
         }
-        if (pasteActive && keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            cancelPaste();
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && selection.cancelSelection()) {
             return true;
         }
-        if (pasteActive && (keyCode == GLFW.GLFW_KEY_LEFT
+        if (selection.isPasting() && (keyCode == GLFW.GLFW_KEY_LEFT
                 || keyCode == GLFW.GLFW_KEY_RIGHT
                 || keyCode == GLFW.GLFW_KEY_UP
                 || keyCode == GLFW.GLFW_KEY_DOWN)) {
             int step = hasShiftDown() ? 8 : 1;
             int deltaX = keyCode == GLFW.GLFW_KEY_LEFT ? -step : keyCode == GLFW.GLFW_KEY_RIGHT ? step : 0;
             int deltaY = keyCode == GLFW.GLFW_KEY_UP ? -step : keyCode == GLFW.GLFW_KEY_DOWN ? step : 0;
-            movePasteBy(deltaX, deltaY);
+            selection.movePasteBy(deltaX, deltaY);
             return true;
         }
         if (activeTool == PaintTool.SELECT && keyCode == GLFW.GLFW_KEY_DELETE) {
-            clearPixelSelection();
+            selection.clearPixelSelection();
             return true;
         }
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_Y) {
@@ -529,10 +572,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_H) {
-            if (!selectedElementIds.isEmpty()) {
-                for (String elementId : selectedElementIds) {
-                    hiddenElements.add(elementId);
-                }
+            if (!parts.selected().isEmpty()) {
+                parts.hideSelected();
                 return true;
             }
             if (isInsidePreview(lastMouseX, lastMouseY)) {
@@ -540,7 +581,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             }
         }
         if (keyCode == GLFW.GLFW_KEY_U) {
-            hiddenElements.clear();
+            parts.showAll();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_G) {
@@ -585,31 +626,50 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (libraryPanelVisible()) {
             return libraryPanel.mouseScrolled(mouseX, mouseY, scrollY);
         }
+        if (choices.isOpen()) {
+            choices.mouseScrolled(scrollY);
+            return true;
+        }
+        if (helpVisible) {
+            helpScroll = Mth.clamp(helpScroll - (int) Math.signum(scrollY) * 20, 0, helpMaxScroll);
+            return true;
+        }
+        if (actionsVisible || colorPicker.isPaletteVisible()) return true;
         if (isInsidePreview(mouseX, mouseY)) {
-            clearPixelSelectionOverlay();
             zoomPreviewAt(mouseX, mouseY, scrollY);
             return true;
         }
         if (editorMode == EditorMode.PAINT
                 && (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
-                && isInside(mouseX, mouseY, leftPos + 60, topPos + SIZE_Y, 58, 16)) {
+                && isInside(mouseX, mouseY, leftPos + rightX() + 4, topPos + SIZE_Y, 88, 18)) {
             brushSize = Mth.clamp(brushSize + (int) Math.signum(scrollY), 1, 8);
             return true;
         }
-        if (editorMode == EditorMode.PARTS && isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, ELEMENT_HEIGHT)) {
-            List<PaintableSailMesh.Element> elements = elements();
-            int maxScroll = Math.max(0, elements.size() - visibleElementRows());
-            elementScroll = Mth.clamp(elementScroll - (int) Math.signum(scrollY), 0, maxScroll);
+        if (elementListVisible() && isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, previewHeight())) {
+            parts.scrollBy(-(int) Math.signum(scrollY), visibleElementRows());
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        if (choices.isOpen()) {
+            choices.mouseMoved(mouseX / uiScale, mouseY / uiScale);
+            return;
+        }
+        super.mouseMoved(mouseX / uiScale, mouseY / uiScale);
+    }
+
+    @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        if (draftSync.isLoading()) return true;
+        if (choices.isOpen()) return true;
         if (libraryPanelVisible()) {
             return libraryPanel.charTyped(codePoint, modifiers);
         }
@@ -618,6 +678,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     @Override
     public void onFilesDrop(List<Path> paths) {
+        if (draftSync.isLoading()) return;
+        choices.close();
         if (libraryPanel == null) {
             super.onFilesDrop(paths);
             return;
@@ -629,15 +691,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void drawLeftPanel(GuiGraphics guiGraphics, int x0, int y0) {
-        int left = x0 + ELEMENT_X;
-        int top = y0 + ELEMENT_Y;
-        HeraldryGuiTheme.drawPanel(guiGraphics, left - 4, top - 18, ELEMENT_WIDTH + 8, ELEMENT_HEIGHT + 22);
         drawModeTabs(guiGraphics, x0, y0);
-
-        switch (editorMode) {
-            case PAINT -> drawPaintPanel(guiGraphics, x0, y0);
-            case PARTS -> drawElementRows(guiGraphics, x0, y0);
-            case VIEW -> drawViewPanel(guiGraphics, x0, y0);
+        if (editorMode == EditorMode.PAINT) {
+            drawToolButtons(guiGraphics, x0, y0);
+        } else if (editorMode == EditorMode.PARTS) {
+            drawControl(guiGraphics, x0 + TOOL_X, y0 + TOOL_Y, TOOL_WIDTH, TOOL_HEIGHT, false,
+                    Component.literal(partsListVisible ? "<" : ">"));
         }
     }
 
@@ -647,118 +706,133 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             int x = x0 + MODE_TAB_X + index * MODE_TAB_WIDTH;
             int y = y0 + MODE_TAB_Y;
             boolean selected = modes[index] == editorMode;
-            drawControl(guiGraphics, x, y, MODE_TAB_WIDTH - 1, MODE_TAB_HEIGHT, selected, modes[index].displayName());
+            drawToggleControl(guiGraphics, x, y, MODE_TAB_WIDTH - 1, MODE_TAB_HEIGHT, selected, modes[index].displayName());
         }
     }
 
     private void drawPaintPanel(GuiGraphics guiGraphics, int x0, int y0) {
-        drawToolButtons(guiGraphics, x0, y0);
-        if (activeTool == PaintTool.SELECT) {
-            Component hint = Component.translatable(pasteActive
-                    ? "smallshipsheraldry.selection.move_hint"
-                    : "smallshipsheraldry.selection.drag_hint");
-            int lineY = y0 + 72;
-            for (FormattedCharSequence line : font.split(hint, ELEMENT_WIDTH)) {
-                guiGraphics.drawString(font, line, x0 + ELEMENT_X, lineY, HeraldryGuiTheme.MUTED_INK, false);
-                lineY += 10;
-            }
-            drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.selection.shortcuts"),
-                    x0 + ELEMENT_X + ELEMENT_WIDTH / 2, y0 + 132, HeraldryGuiTheme.MUTED_INK);
-            return;
-        }
+        int x = x0 + rightX() + 4;
         if (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) {
-            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.size"), x0 + SETTINGS_LABEL_X, y0 + SIZE_Y + 4, HeraldryGuiTheme.INK, false);
-            drawControl(guiGraphics, x0 + 62, y0 + SIZE_Y, 15, 16, false, Component.literal("-"));
-            drawControl(guiGraphics, x0 + 79, y0 + SIZE_Y, 20, 16, true, Component.literal(Integer.toString(brushSize)));
-            drawControl(guiGraphics, x0 + 101, y0 + SIZE_Y, 15, 16, false, Component.literal("+"));
-
-            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.stroke"), x0 + SETTINGS_LABEL_X, y0 + STROKE_Y + 4, HeraldryGuiTheme.INK, false);
-            drawControl(guiGraphics, x0 + 50, y0 + STROKE_Y, 32, 16, strokeMode == StrokeMode.FREEHAND, Component.translatable("smallshipsheraldry.stroke.freehand_short"));
-            drawControl(guiGraphics, x0 + 84, y0 + STROKE_Y, 32, 16, strokeMode == StrokeMode.LINE, Component.translatable("smallshipsheraldry.stroke.line_short"));
-
-            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.symmetry"), x0 + SETTINGS_LABEL_X, y0 + SYMMETRY_Y + 4, HeraldryGuiTheme.INK, false);
-            drawIconControl(guiGraphics, x0 + 76, y0 + SYMMETRY_Y, 18, 18, mirrorVertical, 64);
-            drawIconControl(guiGraphics, x0 + 96, y0 + SYMMETRY_Y, 18, 18, mirrorHorizontal, 80);
+            guiGraphics.drawString(font, activeTool.displayName(), x, y0 + 210, HeraldryGuiTheme.INK, false);
+            drawControl(guiGraphics, x, y0 + SIZE_Y, 18, 18, false, brushSize > 1, Component.literal("-"));
+            drawCenteredNoShadow(guiGraphics, Component.literal(brushSize + " px"), x + 44, y0 + SIZE_Y + 5, HeraldryGuiTheme.INK);
+            drawControl(guiGraphics, x + 70, y0 + SIZE_Y, 18, 18, false, brushSize < 8, Component.literal("+"));
+            drawChoiceControl(guiGraphics, x, y0 + STROKE_Y, 88,
+                    Component.translatable(strokeMode == StrokeMode.LINE ? "smallshipsheraldry.stroke.line_short" : "smallshipsheraldry.stroke.freehand"));
+            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.symmetry"), x, y0 + SYMMETRY_Y + 5, HeraldryGuiTheme.INK, false);
+            drawIconControl(guiGraphics, x + 46, y0 + SYMMETRY_Y, 18, 18, mirrorVertical, 64);
+            drawIconControl(guiGraphics, x + 70, y0 + SYMMETRY_Y, 18, 18, mirrorHorizontal, 80);
         } else if (activeTool == PaintTool.FILL) {
-            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.mode"), x0 + SETTINGS_LABEL_X, y0 + FILL_MODE_Y + 4, HeraldryGuiTheme.INK, false);
-            drawControl(guiGraphics, x0 + 42, y0 + FILL_MODE_Y, 16, 16, false, Component.literal("<"));
-            int iconU = fillMode == FillMode.REPLACE ? 96 : 48;
-            drawIconControl(guiGraphics, x0 + 60, y0 + FILL_MODE_Y, 18, 18, true, iconU);
-            drawControl(guiGraphics, x0 + 80, y0 + FILL_MODE_Y, 16, 16, false, Component.literal(">"));
-            drawCenteredNoShadow(guiGraphics, fillMode.displayName(), x0 + ELEMENT_X + ELEMENT_WIDTH / 2, y0 + FILL_MODE_Y + 21, HeraldryGuiTheme.MUTED_INK);
+            guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.control.mode"), x, y0 + 210, HeraldryGuiTheme.INK, false);
+            drawChoiceControl(guiGraphics, x, y0 + FILL_MODE_Y, 88,
+                    Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_short"));
+            drawWrapped(guiGraphics, Component.translatable("smallshipsheraldry.fill." + fillMode.label() + "_hint"), x, y0 + 248, 88);
         }
+    }
 
-        Component scope = selectedElementIds.isEmpty()
+    private void drawWrapped(GuiGraphics graphics, Component text, int x, int y, int width) {
+        for (FormattedCharSequence line : font.split(text, width)) {
+            graphics.drawString(font, line, x, y, HeraldryGuiTheme.MUTED_INK, false);
+            y += 10;
+        }
+    }
+
+    private void drawActionsPopup(GuiGraphics graphics) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 500);
+        int x = leftPos + 102;
+        int y = topPos + footerY() - 54;
+        HeraldryGuiTheme.drawWindow(graphics, x, y, 184, 48);
+        Component scope = parts.selected().isEmpty()
                 ? Component.translatable("smallshipsheraldry.scope.stage")
-                : Component.translatable("smallshipsheraldry.scope.selected", selectedElementIds.size());
-        drawCenteredNoShadow(guiGraphics, scope, x0 + ELEMENT_X + ELEMENT_WIDTH / 2, y0 + SCOPE_ACTION_Y - 12, HeraldryGuiTheme.MUTED_INK);
-        drawControl(guiGraphics, x0 + ELEMENT_X, y0 + SCOPE_ACTION_Y, 56, 17, false, Component.translatable("smallshipsheraldry.button.fill"));
-        Component clearText = selectedElementIds.isEmpty() && System.currentTimeMillis() < clearConfirmationUntil
-                ? Component.translatable("smallshipsheraldry.button.confirm")
-                : Component.translatable("smallshipsheraldry.button.clear");
-        drawControl(guiGraphics, x0 + ELEMENT_X + 60, y0 + SCOPE_ACTION_Y, 56, 17, false, clearText);
+                : Component.translatable("smallshipsheraldry.scope.selected", parts.selected().size());
+        drawCenteredNoShadow(graphics, scope, x + 92, y + 8, HeraldryGuiTheme.INK);
+        drawControl(graphics, x + 8, y + 24, 80, 18, false, Component.translatable("smallshipsheraldry.button.fill"));
+        drawControl(graphics, x + 96, y + 24, 80, 18, false, Component.translatable(
+                parts.selected().isEmpty() && System.currentTimeMillis() < clearConfirmationUntil
+                        ? "smallshipsheraldry.button.confirm" : "smallshipsheraldry.button.clear"));
+        graphics.flush();
+        graphics.pose().popPose();
+    }
+
+    private void handleActionsClick(double mouseX, double mouseY, int button) {
+        int x = leftPos + 102;
+        int y = topPos + footerY() - 54;
+        if (button == 0 && isInside(mouseX, mouseY, x + 8, y + 24, 80, 18)) {
+            fillScope(colorPicker.color(), false);
+            actionsVisible = false;
+        } else if (button == 0 && isInside(mouseX, mouseY, x + 96, y + 24, 80, 18)) {
+            fillScope(0, true);
+            if (clearConfirmationUntil == 0) actionsVisible = false;
+        } else if (!isInside(mouseX, mouseY, x, y, 184, 48)) {
+            actionsVisible = false;
+        }
     }
 
     private void drawElementRows(GuiGraphics guiGraphics, int x0, int y0) {
         int left = x0 + ELEMENT_X;
         int top = y0 + ELEMENT_Y;
 
-        List<PaintableSailMesh.Element> elements = elements();
+        List<PaintableSailMesh.Element> elements = parts.elements();
         int rows = visibleElementRows();
         for (int row = 0; row < rows; row++) {
-            int index = elementScroll + row;
+            int index = parts.scroll() + row;
             int rowTop = top + row * ELEMENT_ROW_HEIGHT;
             if (index >= elements.size()) {
-                guiGraphics.fill(left, rowTop, left + ELEMENT_WIDTH, rowTop + 11, HeraldryGuiTheme.PAPER_ALT);
-                continue;
+                break;
             }
 
             PaintableSailMesh.Element element = elements.get(index);
-            boolean hidden = hiddenElements.contains(element.id());
-            boolean selected = selectedElementIds.contains(element.id());
-            guiGraphics.fill(left, rowTop, left + ELEMENT_WIDTH, rowTop + 11, selected ? HeraldryGuiTheme.GOLD : hidden ? HeraldryGuiTheme.INSET : HeraldryGuiTheme.PAPER_ALT);
-            guiGraphics.fill(left + 2, rowTop + 2, left + 9, rowTop + 9, hidden ? HeraldryGuiTheme.PAPER_ALT : selected ? HeraldryGuiTheme.PAPER : HeraldryGuiTheme.SELECTED);
+            boolean hidden = parts.hidden().contains(element.id());
+            boolean selected = parts.selected().contains(element.id());
+            HeraldryGuiTheme.drawRow(guiGraphics, left, rowTop, ELEMENT_WIDTH, 11, selected, hidden);
+            guiGraphics.fill(left + 2, rowTop + 2, left + 9, rowTop + 9, hidden ? HeraldryGuiTheme.SURFACE_ALT : selected ? HeraldryGuiTheme.SURFACE : HeraldryGuiTheme.SELECTED);
             if (hidden) {
                 guiGraphics.fill(left + 2, rowTop + 5, left + 9, rowTop + 6, HeraldryGuiTheme.MUTED_INK);
             }
-            String label = font.plainSubstrByWidth(friendlyElementName(elements, index).getString(), ELEMENT_WIDTH - 16);
+            String label = font.plainSubstrByWidth(parts.friendlyName(index).getString(), ELEMENT_WIDTH - 16);
             guiGraphics.drawString(font, label, left + 13, rowTop + 2, hidden ? HeraldryGuiTheme.MUTED_INK : HeraldryGuiTheme.INK, false);
         }
     }
 
     private void drawViewPanel(GuiGraphics guiGraphics, int x0, int y0) {
-        int x = x0 + ELEMENT_X;
-        int y = y0 + ELEMENT_Y + 4;
-        drawControl(guiGraphics, x, y, ELEMENT_WIDTH, 17, gridVisible, gridButtonText());
-        drawControl(guiGraphics, x, y + 22, 56, 17, false, Component.translatable("smallshipsheraldry.view.front"));
-        drawControl(guiGraphics, x + 60, y + 22, 56, 17, false, Component.translatable("smallshipsheraldry.view.back"));
-        drawControl(guiGraphics, x, y + 42, 56, 17, false, Component.translatable("smallshipsheraldry.view.left"));
-        drawControl(guiGraphics, x + 60, y + 42, 56, 17, false, Component.translatable("smallshipsheraldry.view.right"));
-        drawControl(guiGraphics, x, y + 66, ELEMENT_WIDTH, 17, false, Component.translatable("smallshipsheraldry.view.reset"));
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.controls"), x + ELEMENT_WIDTH / 2, y + 94, HeraldryGuiTheme.MUTED_INK);
+        int x = x0 + rightX() + 4;
+        int y = y0 + 32;
+        drawToggleControl(guiGraphics, x, y, 88, 18, gridVisible, gridButtonText());
+        String[] presets = {"front", "back", "left", "right"};
+        for (int index = 0; index < presets.length; index++) {
+            drawControl(guiGraphics, x, y + 26 + index * 22, 88, 18, false,
+                    Component.translatable("smallshipsheraldry.view." + presets[index]));
+        }
+        drawControl(guiGraphics, x, y + 120, 88, 18, false, Component.translatable("smallshipsheraldry.view.reset"));
     }
 
     private void drawPreview(GuiGraphics guiGraphics, int x0, int y0) {
-        HeraldryGuiTheme.drawPreviewInset(guiGraphics, x0 + PREVIEW_X - 4, y0 + PREVIEW_Y - 4, PREVIEW_WIDTH + 8, PREVIEW_HEIGHT + 8);
+        HeraldryGuiTheme.drawPreviewInset(guiGraphics, x0 + previewX() - 1, y0 + PREVIEW_Y - 1, previewWidth() + 2, previewHeight() + 2);
+        if (draftSync.isLoading()) {
+            drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.screen.loading"),
+                    x0 + previewX() + previewWidth() / 2, y0 + PREVIEW_Y + previewHeight() / 2, 0xFFFFFFFF);
+            return;
+        }
         Optional<Integer> hoveredFaceIndex = gridFaceIndexUnderMouse();
-        PaintableSailMesh.setEditorHiddenElements(hiddenElements);
+        PaintableSailMesh.setEditorHiddenElements(parts.hidden());
         PaintableSailMesh.setEditorGridVisible(gridVisible);
         PaintableSailMesh.setEditorHighlightFaceIndex(hoveredFaceIndex.orElse(null));
         PaintableSailMesh.setEditorGridFaceIndex(gridVisible ? hoveredFaceIndex.orElse(null) : null);
         try {
             PreviewShipRenderer.render(
                     guiGraphics,
-                    x0 + PREVIEW_X,
+                    x0 + previewX(),
                     y0 + PREVIEW_Y,
-                    x0 + PREVIEW_X + PREVIEW_WIDTH,
-                    y0 + PREVIEW_Y + PREVIEW_HEIGHT,
+                    x0 + previewX() + previewWidth(),
+                    y0 + PREVIEW_Y + previewHeight(),
                     previewShip,
-                    previewYaw,
-                    previewPitch,
-                    previewZoom,
-                    previewPanX,
-                    previewPanY,
-                    hiddenElements,
+                    camera.yaw(),
+                    camera.pitch(),
+                    previewZoom(),
+                    previewPanX(),
+                    previewPanY(),
+                    parts.hidden(),
                     draftTexture == null ? null : draftTexture.textureLocation()
             );
         } finally {
@@ -767,12 +841,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             PaintableSailMesh.clearEditorHighlightFaceIndex();
             PaintableSailMesh.clearEditorGridFaceIndex();
         }
-        drawPixelSelection(guiGraphics);
-        if (!selectedElementIds.isEmpty()) {
+        if (editorMode == EditorMode.PAINT && activeTool == PaintTool.SELECT) {
+            selection.drawPixelSelection(guiGraphics);
+        }
+        if (!parts.selected().isEmpty()) {
             String selectionLabel;
-            if (selectedElementIds.size() == 1) {
-                String selectedId = selectedElementIds.iterator().next();
-                List<PaintableSailMesh.Element> elements = elements();
+            if (parts.selected().size() == 1) {
+                String selectedId = parts.selected().iterator().next();
+                List<PaintableSailMesh.Element> elements = parts.elements();
                 int selectedIndex = -1;
                 for (int index = 0; index < elements.size(); index++) {
                     if (elements.get(index).id().equals(selectedId)) {
@@ -780,85 +856,87 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                         break;
                     }
                 }
-                selectionLabel = selectedIndex >= 0 ? friendlyElementName(elements, selectedIndex).getString() : shortElementName(selectedId);
+                selectionLabel = selectedIndex >= 0 ? parts.friendlyName(selectedIndex).getString() : shortElementName(selectedId);
             } else {
-                selectionLabel = Integer.toString(selectedElementIds.size());
+                selectionLabel = Integer.toString(parts.selected().size());
             }
             Component selected = Component.translatable("smallshipsheraldry.screen.selected", selectionLabel);
-            guiGraphics.drawString(font, font.plainSubstrByWidth(selected.getString(), PREVIEW_WIDTH - 16), x0 + PREVIEW_X + 8, y0 + PREVIEW_Y + 8, HeraldryGuiTheme.GOLD_LIGHT, false);
+            guiGraphics.drawString(font, font.plainSubstrByWidth(selected.getString(), previewWidth() - 16), x0 + previewX() + 8, y0 + PREVIEW_Y + 8, HeraldryGuiTheme.HIGHLIGHT, false);
         }
-        if (paintingPreview && strokeMode == StrokeMode.LINE && strokeStartHit != null) {
-            drawLinePreview(guiGraphics);
+        if (paint.isLine()) {
+            paint.drawLinePreview(guiGraphics);
         }
     }
 
     private void drawRightPanel(GuiGraphics guiGraphics, int x0, int y0) {
-        HeraldryGuiTheme.drawPanel(guiGraphics, x0 + RIGHT_X - 4, y0 + 18, RIGHT_WIDTH + 8, ELEMENT_HEIGHT + 22);
         switch (editorMode) {
             case PAINT -> {
                 if (activeTool == PaintTool.SELECT) {
                     drawSelectionActions(guiGraphics, x0, y0);
+                    drawWrapped(guiGraphics, Component.translatable(selection.isPasting()
+                            ? "smallshipsheraldry.selection.move_hint" : "smallshipsheraldry.selection.drag_hint"),
+                            x0 + rightX() + 4, y0 + 180, 88);
                 } else {
+                    guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.screen.color"), x0 + rightX() + 4, y0 + 32, HeraldryGuiTheme.INK, false);
                     colorPicker.render(guiGraphics);
-                    drawControl(guiGraphics, x0 + RIGHT_X + 4, y0 + 142, 80, 17, false, Component.translatable("smallshipsheraldry.button.base"));
+                    drawControl(guiGraphics, x0 + rightX() + 4, y0 + 166, 88, 17, false, Component.translatable("smallshipsheraldry.button.base"));
+                    drawControl(guiGraphics, x0 + rightX() + 4, y0 + 187, 88, 17, false, Component.translatable("smallshipsheraldry.button.palette"));
+                    drawPaintPanel(guiGraphics, x0, y0);
                 }
             }
             case PARTS -> drawPartsActions(guiGraphics, x0, y0);
-            case VIEW -> drawViewDetails(guiGraphics, x0, y0);
+            case VIEW -> {
+                drawViewPanel(guiGraphics, x0, y0);
+                drawViewDetails(guiGraphics, x0, y0);
+            }
         }
     }
 
     private void drawSelectionActions(GuiGraphics guiGraphics, int x0, int y0) {
-        int x = x0 + RIGHT_X + 4;
-        int y = y0 + 28;
-        drawControl(guiGraphics, x, y, 38, 18, false, Component.translatable("smallshipsheraldry.selection.copy"));
-        drawControl(guiGraphics, x + 42, y, 38, 18, false, Component.translatable("smallshipsheraldry.selection.cut"));
-        drawControl(guiGraphics, x, y + 22, 80, 18, pasteActive, Component.translatable("smallshipsheraldry.selection.paste"));
-        drawControl(guiGraphics, x, y + 48, 38, 18, pasteActive, Component.translatable("smallshipsheraldry.selection.apply"));
-        drawControl(guiGraphics, x + 42, y + 48, 38, 18, false, Component.translatable("smallshipsheraldry.selection.cancel"));
-        drawControl(guiGraphics, x, y + 70, 80, 18, false, Component.translatable("smallshipsheraldry.selection.delete"));
+        int x = x0 + rightX() + 4;
+        int y = y0 + 32;
+        boolean hasSelection = selection.hasSelection();
+        drawControl(guiGraphics, x, y, 42, 18, false, hasSelection, Component.translatable("smallshipsheraldry.selection.copy"));
+        drawControl(guiGraphics, x + 46, y, 42, 18, false, hasSelection, Component.translatable("smallshipsheraldry.selection.cut"));
+        drawControl(guiGraphics, x, y + 22, 88, 18, selection.isPasting(), selection.hasClipboard(), Component.translatable("smallshipsheraldry.selection.paste"));
+        drawControl(guiGraphics, x, y + 48, 42, 18, false, selection.hasPasteTarget(), Component.translatable("smallshipsheraldry.selection.apply"));
+        drawControl(guiGraphics, x + 46, y + 48, 42, 18, false, selection.isPasting() || hasSelection, Component.translatable("smallshipsheraldry.selection.cancel"));
+        drawControl(guiGraphics, x, y + 70, 88, 18, false, selection.isPasting() || hasSelection, Component.translatable("smallshipsheraldry.selection.delete"));
 
-        SelectionRect rect = pixelSelection();
-        Component summary = pasteActive && clipboard != null
-                ? Component.translatable("smallshipsheraldry.selection.size", clipboard.width(), clipboard.height())
-                : rect == null
-                ? Component.translatable("smallshipsheraldry.selection.none")
-                : Component.translatable("smallshipsheraldry.selection.size", rect.width(), rect.height());
-        drawCenteredNoShadow(guiGraphics, summary, x + 40, y + 96, HeraldryGuiTheme.MUTED_INK);
+        drawCenteredNoShadow(guiGraphics, selection.summary(), x + 44, y + 96, HeraldryGuiTheme.MUTED_INK);
+        drawWrapped(guiGraphics, Component.translatable("smallshipsheraldry.selection.shortcuts"), x, y + 120, 88);
     }
 
     private void drawPartsActions(GuiGraphics guiGraphics, int x0, int y0) {
-        int x = x0 + RIGHT_X + 4;
-        int y = y0 + 28;
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.parts.selected", selectedElementIds.size()), x + 40, y, HeraldryGuiTheme.INK);
-        drawControl(guiGraphics, x, y + 16, 80, 17, false, Component.translatable("smallshipsheraldry.parts.select_all"));
-        drawControl(guiGraphics, x, y + 36, 80, 17, false, Component.translatable("smallshipsheraldry.parts.deselect"));
-        drawControl(guiGraphics, x, y + 60, 38, 18, false, Component.translatable("smallshipsheraldry.parts.hide"));
-        drawIconControl(guiGraphics, x + 42, y + 60, 38, 18, selectionIsIsolated(), 112);
-        drawControl(guiGraphics, x, y + 82, 80, 17, false, Component.translatable("smallshipsheraldry.parts.show_all"));
-        drawControl(guiGraphics, x, y + 108, 38, 18, false, Component.translatable("smallshipsheraldry.button.fill"));
-        drawControl(guiGraphics, x + 42, y + 108, 38, 18, false, Component.translatable("smallshipsheraldry.button.clear"));
+        int x = x0 + rightX() + 4;
+        int y = y0 + 32;
+        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.parts.selected", parts.selected().size()), x + 44, y, HeraldryGuiTheme.INK);
+        drawControl(guiGraphics, x, y + 16, 88, 17, false, Component.translatable("smallshipsheraldry.parts.select_all"));
+        drawControl(guiGraphics, x, y + 36, 88, 17, false, Component.translatable("smallshipsheraldry.parts.deselect"));
+        drawControl(guiGraphics, x, y + 60, 42, 18, false, Component.translatable("smallshipsheraldry.parts.hide"));
+        drawIconControl(guiGraphics, x + 46, y + 60, 42, 18, parts.isIsolated(), 112);
+        drawControl(guiGraphics, x, y + 82, 88, 17, false, Component.translatable("smallshipsheraldry.parts.show_all"));
+        drawControl(guiGraphics, x, y + 108, 88, 18, false, Component.translatable("smallshipsheraldry.button.fill"));
+        drawControl(guiGraphics, x, y + 130, 88, 18, false, Component.translatable("smallshipsheraldry.button.clear"));
     }
 
     private void drawViewDetails(GuiGraphics guiGraphics, int x0, int y0) {
-        int center = x0 + RIGHT_X + RIGHT_WIDTH / 2;
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.camera"), center, y0 + 30, HeraldryGuiTheme.INK);
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.rotate_hint"), center, y0 + 50, HeraldryGuiTheme.MUTED_INK);
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.pan_hint"), center, y0 + 68, HeraldryGuiTheme.MUTED_INK);
-        drawCenteredNoShadow(guiGraphics, Component.translatable("smallshipsheraldry.view.zoom_hint"), center, y0 + 86, HeraldryGuiTheme.MUTED_INK);
+        int x = x0 + rightX() + 4;
+        int y = y0 + 188;
+        for (String key : List.of("rotate_hint", "pan_hint", "zoom_hint")) {
+            for (FormattedCharSequence line : font.split(Component.translatable("smallshipsheraldry.view." + key), 88)) {
+                guiGraphics.drawString(font, line, x, y, HeraldryGuiTheme.MUTED_INK, false);
+                y += 10;
+            }
+            y += 8;
+        }
     }
 
     private void drawToolButtons(GuiGraphics guiGraphics, int x0, int y0) {
         PaintTool[] tools = PaintTool.values();
         for (int index = 0; index < tools.length; index++) {
-            PaintTool tool = tools[index];
-            int x = x0 + TOOL_X + index * (TOOL_WIDTH + TOOL_GAP);
-            int y = y0 + TOOL_Y;
-            boolean selected = tool == activeTool;
-            boolean hovered = isInside(lastMouseX, lastMouseY, x, y, TOOL_WIDTH, TOOL_HEIGHT);
-            guiGraphics.fill(x - 1, y - 1, x + TOOL_WIDTH + 1, y + TOOL_HEIGHT + 1, selected || hovered ? HeraldryGuiTheme.GOLD_LIGHT : HeraldryGuiTheme.FRAME_DARK);
-            guiGraphics.fill(x, y, x + TOOL_WIDTH, y + TOOL_HEIGHT, selected ? HeraldryGuiTheme.SELECTED : hovered ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.PAPER_ALT);
-            guiGraphics.blit(TOOL_ICONS, x + 1, y + 1, tool.iconU(), 0, 16, 16, TOOL_TEXTURE_WIDTH, 16);
+            drawIconControl(guiGraphics, x0 + TOOL_X, y0 + TOOL_Y + index * (TOOL_HEIGHT + TOOL_GAP),
+                    TOOL_WIDTH, TOOL_HEIGHT, tools[index] == activeTool, tools[index].iconU());
         }
     }
 
@@ -867,8 +945,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void openLibrary() {
+        choices.close();
         helpVisible = false;
-        clearPixelSelectionOverlay();
+        actionsVisible = false;
+        colorPicker.closePalette();
+        selection.clearPixelSelectionOverlay();
         if (libraryButton != null) {
             libraryButton.visible = false;
         }
@@ -881,13 +962,13 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void loadLibraryPattern(HeraldryPatternData imported) {
-        clearPixelSelectionOverlay();
+        selection.clearPixelSelectionOverlay();
         session.importPattern(imported);
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
             draftTexture.uploadIfDirty();
         }
-        switchElementContext();
+        parts.switchContext(session.shipType(), previewStage);
         rebuildPreviewShip();
     }
 
@@ -918,7 +999,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
     }
 
-
     private void drawHelpPopupAboveEverything(GuiGraphics guiGraphics) {
         guiGraphics.flush();
         RenderSystem.disableDepthTest();
@@ -935,42 +1015,68 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
     private void drawHelpPopup(GuiGraphics guiGraphics) {
         int x = leftPos + 20;
-        int y = topPos + 28;
+        int y = topPos + 30;
         int width = imageWidth - 40;
-        int height = 226;
+        int height = imageHeight - 60;
         HeraldryGuiTheme.drawWindow(guiGraphics, x - 2, y - 2, width + 4, height + 4);
         guiGraphics.drawString(font, Component.translatable("smallshipsheraldry.help.title"), x + 8, y + 8, HeraldryGuiTheme.INK, false);
 
-        Component[] lines = {
-                Component.translatable("smallshipsheraldry.help.layout"),
-                Component.translatable("smallshipsheraldry.help.paint"),
-                Component.translatable("smallshipsheraldry.help.parts"),
-                Component.translatable("smallshipsheraldry.help.view"),
-                Component.translatable("smallshipsheraldry.help.navigation"),
-                Component.translatable("smallshipsheraldry.help.library"),
-                Component.translatable("smallshipsheraldry.help.workflow")
+        String[] paragraphs = {
+                "section.modes", "layout", "paint", "parts", "view", "navigation",
+                "section.controls", "controls", "selection",
+                "section.patterns", "library", "workflow", "apply"
         };
-        int lineY = y + 24;
-        for (Component line : lines) {
-            for (FormattedCharSequence wrappedLine : font.split(line, width - 16)) {
-                guiGraphics.drawString(font, wrappedLine, x + 8, lineY, HeraldryGuiTheme.MUTED_INK, false);
+        List<HelpLine> lines = new java.util.ArrayList<>();
+        for (String paragraph : paragraphs) {
+            int color = paragraph.startsWith("section.") ? HeraldryGuiTheme.INK : HeraldryGuiTheme.MUTED_INK;
+            for (FormattedCharSequence line : font.split(Component.translatable("smallshipsheraldry.help." + paragraph), width - 24)) {
+                lines.add(new HelpLine(line, color));
+            }
+            lines.add(new HelpLine(FormattedCharSequence.EMPTY, color));
+        }
+        int contentTop = y + 24;
+        int contentBottom = y + height - 20;
+        int visibleHeight = contentBottom - contentTop;
+        helpMaxScroll = Math.max(0, lines.size() * 10 - visibleHeight);
+        helpScroll = Mth.clamp(helpScroll, 0, helpMaxScroll);
+        GuiScissor.enable(guiGraphics, x + 8, contentTop, x + width - 14, contentBottom);
+        try {
+            int lineY = contentTop - helpScroll;
+            for (HelpLine line : lines) {
+                if (lineY + 9 > contentTop && lineY < contentBottom) {
+                    guiGraphics.drawString(font, line.text(), x + 8, lineY, line.color(), false);
+                }
                 lineY += 10;
             }
-            lineY += 2;
+        } finally {
+            guiGraphics.disableScissor();
         }
+        if (helpMaxScroll > 0) {
+            int trackX = x + width - 9;
+            int thumbHeight = Math.max(12, visibleHeight * visibleHeight / (lines.size() * 10));
+            int thumbY = contentTop + helpScroll * (visibleHeight - thumbHeight) / helpMaxScroll;
+            guiGraphics.fill(trackX, contentTop, trackX + 3, contentBottom, HeraldryGuiTheme.MUTED_INK);
+            guiGraphics.fill(trackX, thumbY, trackX + 3, thumbY + thumbHeight, HeraldryGuiTheme.INK);
+        }
+        guiGraphics.drawString(font, Component.translatable(helpMaxScroll > 0
+                ? "smallshipsheraldry.help.scroll_hint" : "smallshipsheraldry.help.close_hint"),
+                x + 8, y + height - 12, HeraldryGuiTheme.MUTED_INK, false);
     }
+
+    private record HelpLine(FormattedCharSequence text, int color) {}
 
     private void drawTableSlots(GuiGraphics guiGraphics, int x0, int y0) {
-        drawSlot(guiGraphics, x0 + HeraldryTableMenu.PAPER_SLOT_X, y0 + HeraldryTableMenu.PAPER_SLOT_Y, HeraldryGuiTheme.PAPER_ALT);
-        drawSlot(guiGraphics, x0 + HeraldryTableMenu.RESULT_SLOT_X, y0 + HeraldryTableMenu.RESULT_SLOT_Y, HeraldryGuiTheme.GOLD);
-        int arrowCenter = x0 + (HeraldryTableMenu.PAPER_SLOT_X + 16 + HeraldryTableMenu.RESULT_SLOT_X) / 2;
-        drawCenteredNoShadow(guiGraphics, Component.literal("→"), arrowCenter, y0 + HeraldryTableMenu.RESULT_SLOT_Y + 4, HeraldryGuiTheme.MUTED_INK);
+        drawTableSlot(guiGraphics, x0 + layout.paperSlotX(), y0 + layout.slotY(), menu.getPaperStack());
+        drawTableSlot(guiGraphics, x0 + layout.resultSlotX(), y0 + layout.slotY(), menu.getResultStack());
+        guiGraphics.blit(CRAFTING_TEXTURE,
+                x0 + rightX() - 50, y0 + footerY(), 89, 35, 22, 17);
     }
 
-    private void drawSlot(GuiGraphics guiGraphics, int x, int y, int fillColor) {
-        guiGraphics.fill(x - 2, y - 2, x + 18, y + 18, HeraldryGuiTheme.FRAME_DARK);
-        guiGraphics.fill(x - 1, y - 1, x + 17, y + 17, fillColor);
-        guiGraphics.fill(x, y, x + 16, y + 16, HeraldryGuiTheme.INSET);
+    private void drawTableSlot(GuiGraphics graphics, int x, int y, ItemStack stack) {
+        HeraldryGuiTheme.drawInset(graphics, x - 1, y - 1, 18, 18);
+        graphics.renderItem(stack, x, y);
+        graphics.renderItemDecorations(font, stack, x, y);
+        if (isInside(lastMouseX, lastMouseY, x - 1, y - 1, 18, 18)) renderSlotHighlight(graphics, x, y, 200);
     }
 
     private boolean handleModeTabClick(double mouseX, double mouseY, int button) {
@@ -982,10 +1088,11 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             int x = leftPos + MODE_TAB_X + index * MODE_TAB_WIDTH;
             int y = topPos + MODE_TAB_Y;
             if (isInside(mouseX, mouseY, x, y, MODE_TAB_WIDTH - 1, MODE_TAB_HEIGHT)) {
-                if (modes[index] != EditorMode.PAINT) {
-                    clearPixelSelectionOverlay();
+                if (modes[index] == EditorMode.PARTS) {
+                    selection.clearPixelSelectionOverlay();
                 }
                 editorMode = modes[index];
+                colorPicker.closePalette();
                 colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT);
                 return true;
             }
@@ -998,82 +1105,76 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return false;
         }
         if (activeTool == PaintTool.SELECT) {
-            int x = leftPos + RIGHT_X + 4;
-            int y = topPos + 28;
-            if (isInside(mouseX, mouseY, x, y, 38, 18)) {
-                copyPixelSelection(false);
+            int x = leftPos + rightX() + 4;
+            int y = topPos + 32;
+            if (isInside(mouseX, mouseY, x, y, 42, 18)) {
+                if (selection.hasSelection()) selection.copyPixelSelection(false);
                 return true;
             }
-            if (isInside(mouseX, mouseY, x + 42, y, 38, 18)) {
-                copyPixelSelection(true);
+            if (isInside(mouseX, mouseY, x + 46, y, 42, 18)) {
+                if (selection.hasSelection()) selection.copyPixelSelection(true);
                 return true;
             }
-            if (isInside(mouseX, mouseY, x, y + 22, 80, 18)) {
-                beginPaste();
+            if (isInside(mouseX, mouseY, x, y + 22, 88, 18)) {
+                if (selection.hasClipboard()) selection.beginPaste();
                 return true;
             }
-            if (isInside(mouseX, mouseY, x, y + 48, 38, 18)) {
-                commitPaste();
+            if (isInside(mouseX, mouseY, x, y + 48, 42, 18)) {
+                if (selection.hasPasteTarget()) selection.commitPaste();
                 return true;
             }
-            if (isInside(mouseX, mouseY, x + 42, y + 48, 38, 18)) {
-                if (pasteActive) {
-                    cancelPaste();
+            if (isInside(mouseX, mouseY, x + 46, y + 48, 42, 18)) {
+                if (selection.isPasting()) {
+                    selection.cancelPaste();
                 } else {
-                    clearPixelSelectionOverlay();
+                    selection.clearPixelSelectionOverlay();
                 }
                 return true;
             }
-            if (isInside(mouseX, mouseY, x, y + 70, 80, 18)) {
-                clearPixelSelection();
+            if (isInside(mouseX, mouseY, x, y + 70, 88, 18)) {
+                selection.clearPixelSelection();
                 return true;
             }
             return false;
         }
+        int x = leftPos + rightX() + 4;
         if (activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER) {
-            if (isInside(mouseX, mouseY, leftPos + 62, topPos + SIZE_Y, 15, 16)) {
+            if (isInside(mouseX, mouseY, x, topPos + SIZE_Y, 18, 18)) {
                 brushSize = Math.max(1, brushSize - 1);
                 return true;
             }
-            if (isInside(mouseX, mouseY, leftPos + 101, topPos + SIZE_Y, 15, 16)) {
+            if (isInside(mouseX, mouseY, x + 70, topPos + SIZE_Y, 18, 18)) {
                 brushSize = Math.min(8, brushSize + 1);
                 return true;
             }
-            if (isInside(mouseX, mouseY, leftPos + 50, topPos + STROKE_Y, 32, 16)) {
-                strokeMode = StrokeMode.FREEHAND;
+            if (isInside(mouseX, mouseY, x, topPos + STROKE_Y, 88, 18)) {
+                choices.open(font, x, topPos + STROKE_Y, 88, leftPos + imageWidth - 8,
+                        List.of(Component.translatable("smallshipsheraldry.stroke.freehand"),
+                                Component.translatable("smallshipsheraldry.stroke.line_short")),
+                        strokeMode.ordinal(), index -> strokeMode = StrokeMode.values()[index]);
+                colorPicker.setVisible(false);
                 return true;
             }
-            if (isInside(mouseX, mouseY, leftPos + 84, topPos + STROKE_Y, 32, 16)) {
-                strokeMode = StrokeMode.LINE;
-                return true;
-            }
-            if (isInside(mouseX, mouseY, leftPos + 76, topPos + SYMMETRY_Y, 18, 18)) {
+            if (isInside(mouseX, mouseY, x + 46, topPos + SYMMETRY_Y, 18, 18)) {
                 mirrorVertical = !mirrorVertical;
                 return true;
             }
-            if (isInside(mouseX, mouseY, leftPos + 96, topPos + SYMMETRY_Y, 18, 18)) {
+            if (isInside(mouseX, mouseY, x + 70, topPos + SYMMETRY_Y, 18, 18)) {
                 mirrorHorizontal = !mirrorHorizontal;
                 return true;
             }
-        } else if (activeTool == PaintTool.FILL) {
-            if (isInside(mouseX, mouseY, leftPos + 42, topPos + FILL_MODE_Y, 16, 16)) {
-                fillMode = fillMode.previous();
-                return true;
-            }
-            if (isInside(mouseX, mouseY, leftPos + 80, topPos + FILL_MODE_Y, 16, 16)) {
-                fillMode = fillMode.next();
-                return true;
-            }
-        }
-        if (isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + SCOPE_ACTION_Y, 56, 17)) {
-            fillScope(colorPicker.color(), false);
+        } else if (activeTool == PaintTool.FILL && isInside(mouseX, mouseY, x, topPos + FILL_MODE_Y, 88, 18)) {
+            choices.open(font, x, topPos + FILL_MODE_Y, 88, leftPos + imageWidth - 8,
+                    java.util.Arrays.stream(FillMode.values()).map(FillMode::displayName).toList(),
+                    fillMode.ordinal(), index -> fillMode = FillMode.values()[index]);
+            colorPicker.setVisible(false);
             return true;
         }
-        if (isInside(mouseX, mouseY, leftPos + ELEMENT_X + 60, topPos + SCOPE_ACTION_Y, 56, 17)) {
-            fillScope(0, true);
+        if (isInside(mouseX, mouseY, x, topPos + 187, 88, 17)) {
+            colorPicker.togglePalette();
             return true;
         }
-        if (isInside(mouseX, mouseY, leftPos + RIGHT_X + 4, topPos + 142, 80, 17)) {
+        if (isInside(mouseX, mouseY, x, topPos + 166, 88, 17)) {
             if (pushUndo()) {
                 session.setBaseColor(colorPicker.color());
                 markDirty();
@@ -1088,53 +1189,36 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (button != 0) {
             return false;
         }
-        int x = leftPos + RIGHT_X + 4;
-        int y = topPos + 28;
-        List<PaintableSailMesh.Element> elements = elements();
-        if (isInside(mouseX, mouseY, x, y + 16, 80, 17)) {
-            selectedElementIds.clear();
-            for (PaintableSailMesh.Element element : elements) {
-                selectedElementIds.add(element.id());
-            }
-            selectionAnchorIndex = elements.isEmpty() ? -1 : 0;
+        int x = leftPos + rightX() + 4;
+        int y = topPos + 32;
+        if (isInside(mouseX, mouseY, x, y + 16, 88, 17)) {
+            parts.selectAll();
             return true;
         }
-        if (isInside(mouseX, mouseY, x, y + 36, 80, 17)) {
-            selectedElementIds.clear();
-            selectionAnchorIndex = -1;
+        if (isInside(mouseX, mouseY, x, y + 36, 88, 17)) {
+            parts.deselect();
             return true;
         }
-        if (isInside(mouseX, mouseY, x, y + 60, 38, 18)) {
-            hiddenElements.addAll(selectedElementIds);
+        if (isInside(mouseX, mouseY, x, y + 60, 42, 18)) {
+            parts.hideSelected();
             return true;
         }
-        if (isInside(mouseX, mouseY, x + 42, y + 60, 38, 18)) {
-            if (!selectedElementIds.isEmpty()) {
-                if (selectionIsIsolated()) {
-                    hiddenElements.clear();
-                    return true;
-                }
-                hiddenElements.clear();
-                for (PaintableSailMesh.Element element : elements) {
-                    if (!selectedElementIds.contains(element.id())) {
-                        hiddenElements.add(element.id());
-                    }
-                }
-            }
+        if (isInside(mouseX, mouseY, x + 46, y + 60, 42, 18)) {
+            parts.toggleIsolate();
             return true;
         }
-        if (isInside(mouseX, mouseY, x, y + 82, 80, 17)) {
-            hiddenElements.clear();
+        if (isInside(mouseX, mouseY, x, y + 82, 88, 17)) {
+            parts.showAll();
             return true;
         }
-        if (isInside(mouseX, mouseY, x, y + 108, 38, 18)) {
-            if (!selectedElementIds.isEmpty()) {
+        if (isInside(mouseX, mouseY, x, y + 108, 88, 18)) {
+            if (!parts.selected().isEmpty()) {
                 fillScope(colorPicker.color(), false);
             }
             return true;
         }
-        if (isInside(mouseX, mouseY, x + 42, y + 108, 38, 18)) {
-            if (!selectedElementIds.isEmpty()) {
+        if (isInside(mouseX, mouseY, x, y + 130, 88, 18)) {
+            if (!parts.selected().isEmpty()) {
                 fillScope(0, false);
             }
             return true;
@@ -1143,65 +1227,31 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private boolean handleViewControlClick(double mouseX, double mouseY, int button) {
-        if (button != 0) {
-            return false;
-        }
-        int x = leftPos + ELEMENT_X;
-        int y = topPos + ELEMENT_Y + 4;
-        if (isInside(mouseX, mouseY, x, y, ELEMENT_WIDTH, 17)) {
+        if (button != 0) return false;
+        int x = leftPos + rightX() + 4;
+        int y = topPos + 32;
+        if (isInside(mouseX, mouseY, x, y, 88, 18)) {
             gridVisible = !gridVisible;
             return true;
         }
-        if (isInside(mouseX, mouseY, x, y + 22, 56, 17)) {
-            setCamera(180.0F, 0.0F);
-            return true;
-        }
-        if (isInside(mouseX, mouseY, x + 60, y + 22, 56, 17)) {
-            setCamera(0.0F, 0.0F);
-            return true;
-        }
-        if (isInside(mouseX, mouseY, x, y + 42, 56, 17)) {
-            setCamera(90.0F, 0.0F);
-            return true;
-        }
-        if (isInside(mouseX, mouseY, x + 60, y + 42, 56, 17)) {
-            setCamera(270.0F, 0.0F);
-            return true;
-        }
-        if (isInside(mouseX, mouseY, x, y + 66, ELEMENT_WIDTH, 17)) {
-            clearPixelSelectionOverlay();
-            previewYaw = 180.0F;
-            previewPitch = -10.0F;
-            previewZoom = 1.0F;
-            previewPanX = 0.0F;
-            previewPanY = 0.0F;
-            return true;
-        }
-        return false;
-    }
-
-    private void setCamera(float yaw, float pitch) {
-        clearPixelSelectionOverlay();
-        previewYaw = yaw;
-        previewPitch = pitch;
-        previewPanX = 0.0F;
-        previewPanY = 0.0F;
-    }
-
-    private boolean selectionIsIsolated() {
-        if (selectedElementIds.isEmpty()) {
-            return false;
-        }
-        for (PaintableSailMesh.Element element : elements()) {
-            if (hiddenElements.contains(element.id()) == selectedElementIds.contains(element.id())) {
-                return false;
+        float[] angles = {180, 0, 90, 270};
+        for (int index = 0; index < angles.length; index++) {
+            if (isInside(mouseX, mouseY, x, y + 26 + index * 22, 88, 18)) {
+                setCamera(angles[index], 0);
+                return true;
             }
         }
+        if (!isInside(mouseX, mouseY, x, y + 120, 88, 18)) return false;
+        camera.reset();
         return true;
     }
 
+    private void setCamera(float yaw, float pitch) {
+        camera.orient(yaw, pitch);
+    }
+
     private void fillScope(int color, boolean confirmFullClear) {
-        if (confirmFullClear && selectedElementIds.isEmpty() && System.currentTimeMillis() >= clearConfirmationUntil) {
+        if (confirmFullClear && parts.selected().isEmpty() && System.currentTimeMillis() >= clearConfirmationUntil) {
             clearConfirmationUntil = System.currentTimeMillis() + 2_500L;
             return;
         }
@@ -1209,7 +1259,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (!pushUndo()) {
             return;
         }
-        if (!PaintableSailMesh.fillScopedPixels(previewShip, previewStage, session.pixels(), color, selectedElementIds, hiddenElements)) {
+        if (!PaintableSailMesh.fillScopedPixels(previewShip, previewStage, session.pixels(), color, parts.selected(), parts.hidden())) {
             discardLatestUndo();
             return;
         }
@@ -1218,40 +1268,14 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private boolean handleElementClick(double mouseX, double mouseY, int button) {
-        if ((button != 0 && button != 1) || !isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, ELEMENT_HEIGHT)) {
+        if (!elementListVisible() || (button != 0 && button != 1) || !isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, previewHeight())) {
             return false;
         }
-
-        int row = (int) ((mouseY - (topPos + ELEMENT_Y)) / ELEMENT_ROW_HEIGHT);
-        int index = elementScroll + row;
-        List<PaintableSailMesh.Element> elements = elements();
-        if (index < 0 || index >= elements.size()) {
-            return true;
-        }
-
-        String elementId = elements.get(index).id();
-        if (button == 1) {
-            toggleElementHidden(elementId);
-            return true;
-        }
-        if (hasShiftDown() && selectionAnchorIndex >= 0) {
-            if (!hasControlDown()) {
-                selectedElementIds.clear();
-            }
-            int first = Math.min(selectionAnchorIndex, index);
-            int last = Math.max(selectionAnchorIndex, index);
-            for (int selectedIndex = first; selectedIndex <= last; selectedIndex++) {
-                selectedElementIds.add(elements.get(selectedIndex).id());
-            }
-        } else if (hasControlDown()) {
-            if (!selectedElementIds.add(elementId)) {
-                selectedElementIds.remove(elementId);
-            }
-            selectionAnchorIndex = index;
-        } else {
-            selectedElementIds.clear();
-            selectedElementIds.add(elementId);
-            selectionAnchorIndex = index;
+        int row = (int) ((mouseY - topPos - ELEMENT_Y) / ELEMENT_ROW_HEIGHT);
+        int index = parts.scroll() + row;
+        if (index >= 0 && index < parts.elements().size()) {
+            if (button == 1) parts.toggleHidden(parts.elements().get(index).id());
+            else parts.selectRow(index, hasShiftDown(), hasControlDown());
         }
         return true;
     }
@@ -1276,10 +1300,10 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private int tableSlotAt(double mouseX, double mouseY) {
-        if (isInside(mouseX, mouseY, leftPos + HeraldryTableMenu.PAPER_SLOT_X, topPos + HeraldryTableMenu.PAPER_SLOT_Y, 18, 18)) {
+        if (isInside(mouseX, mouseY, leftPos + layout.paperSlotX() - 1, topPos + layout.slotY() - 1, 18, 18)) {
             return HeraldryTableBlockEntity.PAPER_SLOT;
         }
-        if (isInside(mouseX, mouseY, leftPos + HeraldryTableMenu.RESULT_SLOT_X, topPos + HeraldryTableMenu.RESULT_SLOT_Y, 18, 18)) {
+        if (isInside(mouseX, mouseY, leftPos + layout.resultSlotX() - 1, topPos + layout.slotY() - 1, 18, 18)) {
             return HeraldryTableBlockEntity.RESULT_SLOT;
         }
         return -1;
@@ -1292,8 +1316,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
 
         PaintTool[] tools = PaintTool.values();
         for (int index = 0; index < tools.length; index++) {
-            int x = leftPos + TOOL_X + index * (TOOL_WIDTH + TOOL_GAP);
-            int y = topPos + TOOL_Y;
+            int x = leftPos + TOOL_X;
+            int y = topPos + TOOL_Y + index * (TOOL_HEIGHT + TOOL_GAP);
             if (isInside(mouseX, mouseY, x, y, TOOL_WIDTH, TOOL_HEIGHT)) {
                 setActiveTool(tools[index]);
                 return true;
@@ -1303,100 +1327,25 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private boolean handleColorClick(double mouseX, double mouseY, int button) {
-        return colorPicker.mouseClicked(mouseX, mouseY, button, hasShiftDown());
-    }
-
-    private boolean useToolOnPreview(double mouseX, double mouseY) {
-        Optional<PaintableSailMesh.Hit> hit = pickAtPreview(mouseX, mouseY, hiddenElements);
-        if (hit.isEmpty()) {
-            return true;
-        }
-
-        PaintableSailMesh.Hit paintHit = hit.get();
-        if (!temporaryPicker && activeTool != PaintTool.PICKER && !isHitInSelection(paintHit)) {
-            return true;
-        }
-
-        if (temporaryPicker || activeTool == PaintTool.PICKER) {
-            int sampledColor = session.pixels()[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
-            colorPicker.setColor((sampledColor >>> 24) == 0 ? session.pattern().baseColorArgb() : sampledColor);
-            return true;
-        }
-
-        if (activeTool == PaintTool.FILL) {
-            if (!pushUndo()) {
-                return true;
-            }
-            boolean changed = switch (fillMode) {
-                case AREA -> PaintableSailMesh.floodFillPixels(previewShip, paintHit, previewStage, session.pixels(), colorPicker.color());
-                case FACE -> PaintableSailMesh.fillFacePixels(previewShip, paintHit.faceIndex(), previewStage, session.pixels(), colorPicker.color());
-                case REPLACE -> {
-                    int source = session.pixels()[paintHit.pixelY() * HeraldryPatternData.MESH_ATLAS_WIDTH + paintHit.pixelX()];
-                    yield PaintableSailMesh.replaceColorPixels(previewShip, previewStage, session.pixels(), source, colorPicker.color(), selectedElementIds, hiddenElements);
-                }
-            };
-            if (!changed) {
-                discardLatestUndo();
-                return true;
-            }
-            if (fillMode == FillMode.REPLACE) {
-                replaceDraftTexturePixels();
-            } else {
-                syncHitFace(paintHit);
-            }
-            commitPaintBuffer();
-            return true;
-        }
-
-        int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
-        if (!strokeUndoCaptured) {
-            if (!pushUndo()) {
-                return true;
-            }
-            strokeUndoCaptured = true;
-        }
-        boolean changed;
-        if (lastStrokeHit != null && lastStrokeHit.faceIndex() == paintHit.faceIndex()) {
-            changed = PaintableSailMesh.paintLinePixels(previewShip, lastStrokeHit, paintHit, previewStage, session.pixels(), color,
-                    brushSize, mirrorVertical, mirrorHorizontal);
-        } else {
-            changed = PaintableSailMesh.paintBrushPixels(previewShip, paintHit, previewStage, session.pixels(), color,
-                    brushSize, mirrorVertical, mirrorHorizontal);
-        }
-        lastStrokeHit = paintHit;
-        if (changed) {
-            syncHitFace(paintHit);
-            session.markLocallyModified();
-        }
-        return true;
+        return colorPicker.mouseClicked(mouseX, mouseY, button);
     }
 
     private Optional<PaintableSailMesh.Hit> pickAtPreview(double mouseX, double mouseY, Set<String> hidden) {
         return PaintableSailMesh.pick(
                 previewShip,
-                leftPos + PREVIEW_X,
+                leftPos + previewX(),
                 topPos + PREVIEW_Y,
-                leftPos + PREVIEW_X + PREVIEW_WIDTH,
-                topPos + PREVIEW_Y + PREVIEW_HEIGHT,
-                previewYaw,
-                previewPitch,
-                previewZoom,
-                previewPanX,
-                previewPanY,
+                leftPos + previewX() + previewWidth(),
+                topPos + PREVIEW_Y + previewHeight(),
+                camera.yaw(),
+                camera.pitch(),
+                previewZoom(),
+                previewPanX(),
+                previewPanY(),
                 mouseX,
                 mouseY,
                 hidden
         );
-    }
-
-    private boolean isHitInSelection(PaintableSailMesh.Hit hit) {
-        return selectedElementIds.isEmpty() || selectedElementIds.contains(hit.elementId());
-    }
-
-    private void syncHitFace(PaintableSailMesh.Hit hit) {
-        if (draftTexture != null) {
-            draftTexture.updateRegion(session.pixels(), hit.slotX() - 1, hit.slotY() - 1, hit.slotWidth() + 2, hit.slotHeight() + 2);
-        }
     }
 
     private void replaceDraftTexturePixels() {
@@ -1405,430 +1354,12 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         }
     }
 
-    private boolean beginPixelSelection(double mouseX, double mouseY) {
-        if (pasteActive && clipboard != null) {
-            movingPaste = true;
-            updatePasteTarget(mouseX, mouseY);
-            return true;
-        }
-
-        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
-        if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
-            clearPixelSelectionOverlay();
-            return true;
-        }
-        pixelSelectionActive = true;
-        selectingPixels = true;
-        selectionStartHit = sampled.get();
-        selectionEndHit = sampled.get();
-        refreshSurfaceSelection();
-        return true;
-    }
-
-    private void updatePixelSelection(double mouseX, double mouseY) {
-        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
-        if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
-            return;
-        }
-        Optional<PaintableSailMesh.SurfacePoint> startPoint =
-                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionStartHit);
-        Optional<PaintableSailMesh.SurfacePoint> endPoint =
-                PaintableSailMesh.surfacePoint(previewShip, previewStage, sampled.get());
-        if (startPoint.isEmpty() || endPoint.isEmpty()
-                || startPoint.get().componentId() != endPoint.get().componentId()) {
-            return;
-        }
-        selectionEndHit = sampled.get();
-        refreshSurfaceSelection();
-    }
-
-    private void refreshSurfaceSelection() {
-        if (!pixelSelectionActive || selectionStartHit == null || selectionEndHit == null) {
-            surfaceSelection = List.of();
-            return;
-        }
-        surfaceSelection = PaintableSailMesh.pixelsInSurfaceRect(
-                previewShip,
-                previewStage,
-                selectionStartHit,
-                selectionEndHit,
-                selectedElementIds,
-                hiddenElements
-        );
-    }
-
-    private void copyPixelSelection(boolean cut) {
-        if (!pixelSelectionActive || surfaceSelection.isEmpty()) {
-            showStatus(Component.translatable("smallshipsheraldry.selection.select_first"));
-            return;
-        }
-
-        Map<Integer, CapturedPixel> capturedPixels = new HashMap<>();
-        Set<Integer> clearIndices = new LinkedHashSet<>();
-        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
-        for (PaintableSailMesh.ScreenPixel selectedPixel : surfaceSelection) {
-            PaintableSailMesh.Hit hit = selectedPixel.hit();
-            int atlasIndex = hit.pixelY() * atlasWidth + hit.pixelX();
-            int color = session.pixels()[atlasIndex];
-            capturedPixels.putIfAbsent(atlasIndex, new CapturedPixel(
-                    hit,
-                    selectedPixel.screenX(),
-                    selectedPixel.screenY(),
-                    color
-            ));
-            if (cut && color != 0) {
-                clearIndices.add(atlasIndex);
-            }
-        }
-        if (capturedPixels.isEmpty()) {
-            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
-            return;
-        }
-
-        double selectionCenterX = surfaceSelection.stream()
-                .mapToDouble(PaintableSailMesh.ScreenPixel::screenX)
-                .average()
-                .orElse(leftPos + PREVIEW_X + PREVIEW_WIDTH * 0.5D);
-        double selectionCenterY = surfaceSelection.stream()
-                .mapToDouble(PaintableSailMesh.ScreenPixel::screenY)
-                .average()
-                .orElse(topPos + PREVIEW_Y + PREVIEW_HEIGHT * 0.5D);
-        CapturedPixel anchor = capturedPixels.values().stream()
-                .min((first, second) -> Double.compare(
-                        distanceSquared(first.screenX(), first.screenY(), selectionCenterX, selectionCenterY),
-                        distanceSquared(second.screenX(), second.screenY(), selectionCenterX, selectionCenterY)
-                ))
-                .orElseThrow();
-        Optional<PaintableSailMesh.SurfacePoint> anchorPoint = PaintableSailMesh.surfacePoint(previewShip, previewStage, anchor.hit());
-        if (anchorPoint.isEmpty()) {
-            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
-            return;
-        }
-
-        List<PaintableSailMesh.ClipboardPixel> geometryPixels = new ArrayList<>(capturedPixels.size());
-        float minU = Float.MAX_VALUE;
-        float minV = Float.MAX_VALUE;
-        float maxU = -Float.MAX_VALUE;
-        float maxV = -Float.MAX_VALUE;
-        for (CapturedPixel captured : capturedPixels.values()) {
-            Optional<PaintableSailMesh.SurfacePoint> point = PaintableSailMesh.surfacePoint(previewShip, previewStage, captured.hit());
-            if (point.isEmpty() || point.get().componentId() != anchorPoint.get().componentId()) {
-                continue;
-            }
-            float offsetU = point.get().u() - anchorPoint.get().u();
-            float offsetV = point.get().v() - anchorPoint.get().v();
-            geometryPixels.add(new PaintableSailMesh.ClipboardPixel(
-                    offsetU,
-                    offsetV,
-                    captured.color()
-            ));
-            minU = Math.min(minU, offsetU);
-            minV = Math.min(minV, offsetV);
-            maxU = Math.max(maxU, offsetU);
-            maxV = Math.max(maxV, offsetV);
-        }
-        if (geometryPixels.isEmpty()) {
-            showStatus(Component.translatable("smallshipsheraldry.selection.empty"));
-            return;
-        }
-
-        int geometryWidth = Math.max(1, Mth.ceil((maxU - minU) * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT) + 1);
-        int geometryHeight = Math.max(1, Mth.ceil((maxV - minV) * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT) + 1);
-        closeClipboard();
-        clipboard = new SelectionClipboard(
-                geometryWidth,
-                geometryHeight,
-                List.copyOf(geometryPixels),
-                Mth.clamp(Mth.floor(selectionCenterX - leftPos - PREVIEW_X), 0, PREVIEW_WIDTH - 1),
-                Mth.clamp(Mth.floor(selectionCenterY - topPos - PREVIEW_Y), 0, PREVIEW_HEIGHT - 1)
-        );
-
-        if (cut && !clearIndices.isEmpty() && pushUndo()) {
-            for (int atlasIndex : clearIndices) {
-                session.pixels()[atlasIndex] = 0;
-            }
-            replaceDraftTexturePixels();
-            commitPaintBuffer();
-        }
-        showStatus(Component.translatable("smallshipsheraldry.selection.copied", geometryWidth, geometryHeight));
-    }
-
-    private void beginPaste() {
-        if (clipboard == null) {
-            showStatus(Component.translatable("smallshipsheraldry.selection.clipboard_empty"));
-            return;
-        }
-        pixelSelectionActive = false;
-        selectingPixels = false;
-        movingPaste = false;
-        pasteActive = true;
-        pasteX = clipboard.originX();
-        pasteY = clipboard.originY();
-        updatePasteTarget(leftPos + PREVIEW_X + pasteX + 0.5D, topPos + PREVIEW_Y + pasteY + 0.5D);
-    }
-
-    private void movePaste(double mouseX, double mouseY) {
-        if (!pasteActive || clipboard == null) {
-            movingPaste = false;
-            return;
-        }
-        updatePasteTarget(mouseX, mouseY);
-    }
-
-    private void movePasteBy(int deltaX, int deltaY) {
-        if (!pasteActive || clipboard == null || pasteTargetHit == null) {
-            return;
-        }
-        float pixelScale = PaintableSailMesh.projectedPixelScale(previewShip, pasteTargetHit);
-        updatePasteTarget(
-                leftPos + PREVIEW_X + pasteX + 0.5D + deltaX * pixelScale,
-                topPos + PREVIEW_Y + pasteY + 0.5D + deltaY * pixelScale
-        );
-    }
-
-    private boolean updatePasteTarget(double mouseX, double mouseY) {
-        Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(mouseX, mouseY, hiddenElements);
-        if (sampled.isEmpty() || !isHitInSelection(sampled.get()) || clipboard == null) {
-            return false;
-        }
-        pasteTargetHit = sampled.get();
-        pasteX = previewRelativeX(mouseX);
-        pasteY = previewRelativeY(mouseY);
-        updatePastePreview(PaintableSailMesh.mapClipboardPixels(
-                previewShip,
-                previewStage,
-                pasteTargetHit,
-                clipboard.pixels(),
-                selectedElementIds,
-                hiddenElements
-        ));
-        return true;
-    }
-
-    private void updatePastePreview(Map<Integer, Integer> replacements) {
-        restorePastePreview();
-        pasteReplacements = Map.copyOf(replacements);
-        if (draftTexture == null) {
-            return;
-        }
-        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
-        for (Map.Entry<Integer, Integer> replacement : pasteReplacements.entrySet()) {
-            int atlasIndex = replacement.getKey();
-            draftTexture.setPixel(atlasIndex % atlasWidth, atlasIndex / atlasWidth, replacement.getValue());
-            pastePreviewIndices.add(atlasIndex);
-        }
-    }
-
-    private void restorePastePreview() {
-        if (draftTexture != null && !pastePreviewIndices.isEmpty()) {
-            int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
-            for (int atlasIndex : pastePreviewIndices) {
-                draftTexture.setPixel(atlasIndex % atlasWidth, atlasIndex / atlasWidth, session.pixels()[atlasIndex]);
-            }
-        }
-        pastePreviewIndices.clear();
-    }
-
-    private void commitPaste() {
-        if (!pasteActive || clipboard == null) {
-            return;
-        }
-
-        Map<Integer, Integer> replacements = pasteReplacements;
-        boolean changed = replacements.entrySet().stream()
-                .anyMatch(entry -> session.pixels()[entry.getKey()] != entry.getValue());
-        cancelPaste();
-        if (!changed) {
-            showStatus(Component.translatable(replacements.isEmpty()
-                    ? "smallshipsheraldry.selection.no_target"
-                    : "smallshipsheraldry.selection.unchanged"));
-            return;
-        }
-        if (!pushUndo()) {
-            return;
-        }
-        replacements.forEach((index, color) -> session.pixels()[index] = color);
-        replaceDraftTexturePixels();
-        commitPaintBuffer();
-        pixelSelectionActive = false;
-        selectionStartHit = null;
-        selectionEndHit = null;
-        surfaceSelection = List.of();
-    }
-
-    private void clearPixelSelection() {
-        if (pasteActive) {
-            cancelPaste();
-            return;
-        }
-        if (!pixelSelectionActive || surfaceSelection.isEmpty()) {
-            return;
-        }
-
-        Set<Integer> clearIndices = new LinkedHashSet<>();
-        int atlasWidth = HeraldryPatternData.MESH_ATLAS_WIDTH;
-        for (PaintableSailMesh.ScreenPixel selectedPixel : surfaceSelection) {
-            PaintableSailMesh.Hit hit = selectedPixel.hit();
-            int atlasIndex = hit.pixelY() * atlasWidth + hit.pixelX();
-            if (session.pixels()[atlasIndex] != 0) {
-                clearIndices.add(atlasIndex);
-            }
-        }
-        if (clearIndices.isEmpty() || !pushUndo()) {
-            return;
-        }
-        for (int atlasIndex : clearIndices) {
-            session.pixels()[atlasIndex] = 0;
-        }
-        replaceDraftTexturePixels();
-        commitPaintBuffer();
-    }
-
-    private SelectionRect pixelSelection() {
-        if (!pixelSelectionActive || surfaceSelection.isEmpty()
-                || selectionStartHit == null || selectionEndHit == null) {
-            return null;
-        }
-        Optional<PaintableSailMesh.SurfacePoint> start =
-                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionStartHit);
-        Optional<PaintableSailMesh.SurfacePoint> end =
-                PaintableSailMesh.surfacePoint(previewShip, previewStage, selectionEndHit);
-        if (start.isEmpty() || end.isEmpty()
-                || start.get().componentId() != end.get().componentId()) {
-            return null;
-        }
-        int width = Math.max(1, Mth.floor(
-                Math.abs(end.get().u() - start.get().u())
-                        * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT + 0.5F
-        ) + 1);
-        int height = Math.max(1, Mth.floor(
-                Math.abs(end.get().v() - start.get().v())
-                        * PaintableSailMesh.PAINT_PIXELS_PER_MODEL_UNIT + 0.5F
-        ) + 1);
-        return new SelectionRect(0, 0, width, height);
-    }
-
-    private int previewRelativeX(double mouseX) {
-        return Mth.clamp(Mth.floor(mouseX - leftPos - PREVIEW_X), 0, PREVIEW_WIDTH - 1);
-    }
-
-    private int previewRelativeY(double mouseY) {
-        return Mth.clamp(Mth.floor(mouseY - topPos - PREVIEW_Y), 0, PREVIEW_HEIGHT - 1);
-    }
-
-    private void cancelPaste() {
-        restorePastePreview();
-        pasteActive = false;
-        movingPaste = false;
-        pasteTargetHit = null;
-        pasteReplacements = Map.of();
-    }
-
-    private void clearPixelSelectionOverlay() {
-        selectingPixels = false;
-        pixelSelectionActive = false;
-        selectionStartHit = null;
-        selectionEndHit = null;
-        surfaceSelection = List.of();
-        cancelPaste();
-    }
-
-    private void closeClipboard() {
-        cancelPaste();
-        clipboard = null;
-    }
-
     private void setActiveTool(PaintTool tool) {
         if (activeTool != tool && tool != PaintTool.SELECT) {
-            clearPixelSelectionOverlay();
+            selection.clearPixelSelectionOverlay();
         }
         activeTool = tool;
         colorPicker.setVisible(editorMode == EditorMode.PAINT && activeTool != PaintTool.SELECT);
-    }
-
-    private void applyLineStroke() {
-        if (strokeStartHit == null || !pushUndo()) {
-            return;
-        }
-        int color = activeTool == PaintTool.ERASER ? 0 : colorPicker.color();
-        double deltaX = strokeEndScreenX - strokeStartScreenX;
-        double deltaY = strokeEndScreenY - strokeStartScreenY;
-        double lengthSquared = deltaX * deltaX + deltaY * deltaY;
-        double length = Math.sqrt(lengthSquared);
-        double thickness = lineScreenThickness();
-        double halfThickness = thickness * 0.5D;
-        int previewLeft = leftPos + PREVIEW_X;
-        int previewTop = topPos + PREVIEW_Y;
-        int previewRight = previewLeft + PREVIEW_WIDTH - 1;
-        int previewBottom = previewTop + PREVIEW_HEIGHT - 1;
-        int minX = Math.max(previewLeft, Mth.floor(Math.min(strokeStartScreenX, strokeEndScreenX) - halfThickness));
-        int maxX = Math.min(previewRight, Mth.ceil(Math.max(strokeStartScreenX, strokeEndScreenX) + halfThickness));
-        int minY = Math.max(previewTop, Mth.floor(Math.min(strokeStartScreenY, strokeEndScreenY) - halfThickness));
-        int maxY = Math.min(previewBottom, Mth.ceil(Math.max(strokeStartScreenY, strokeEndScreenY) + halfThickness));
-        Map<Integer, PaintableSailMesh.Hit> touchedFaces = new HashMap<>();
-        Set<Long> touchedPixels = new LinkedHashSet<>();
-        boolean changed = false;
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                double sampleX = x + 0.5D;
-                double sampleY = y + 0.5D;
-                if (!insideLineRectangle(sampleX, sampleY, deltaX, deltaY, lengthSquared, length, halfThickness)) {
-                    continue;
-                }
-                Optional<PaintableSailMesh.Hit> sampled = pickAtPreview(sampleX, sampleY, hiddenElements);
-                if (sampled.isEmpty() || !isHitInSelection(sampled.get())) {
-                    continue;
-                }
-                PaintableSailMesh.Hit hit = sampled.get();
-                long pixelKey = ((long) hit.faceIndex() << 32)
-                        ^ ((long) hit.pixelY() << 16)
-                        ^ (hit.pixelX() & 0xFFFFL);
-                if (!touchedPixels.add(pixelKey)) {
-                    continue;
-                }
-                changed |= PaintableSailMesh.paintBrushPixels(previewShip, hit, previewStage,
-                        session.pixels(), color, 1, mirrorVertical, mirrorHorizontal);
-                touchedFaces.put(hit.faceIndex(), hit);
-            }
-        }
-        if (!changed) {
-            discardLatestUndo();
-            return;
-        }
-        touchedFaces.values().forEach(this::syncHitFace);
-        session.markLocallyModified();
-        commitPaintBuffer();
-    }
-
-    private boolean insideLineRectangle(
-            double x,
-            double y,
-            double deltaX,
-            double deltaY,
-            double lengthSquared,
-            double length,
-            double halfThickness
-    ) {
-        if (lengthSquared < 0.0001D) {
-            return Math.abs(x - strokeStartScreenX) <= halfThickness
-                    && Math.abs(y - strokeStartScreenY) <= halfThickness;
-        }
-        double relativeX = x - strokeStartScreenX;
-        double relativeY = y - strokeStartScreenY;
-        double position = (relativeX * deltaX + relativeY * deltaY) / lengthSquared;
-        if (position < 0.0D || position > 1.0D) {
-            return false;
-        }
-        double perpendicularDistance = Math.abs(relativeX * deltaY - relativeY * deltaX) / length;
-        return perpendicularDistance <= halfThickness;
-    }
-
-    private float lineScreenThickness() {
-        float startScale = PaintableSailMesh.projectedPixelScale(previewShip, strokeStartHit);
-        float endScale = lastStrokeHit == null
-                ? startScale
-                : PaintableSailMesh.projectedPixelScale(previewShip, lastStrokeHit);
-        return Math.max(1.0F, brushSize * (startScale + endScale) * 0.5F);
     }
 
     private Optional<Integer> gridFaceIndexUnderMouse() {
@@ -1836,64 +1367,13 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return Optional.empty();
         }
 
-        Optional<PaintableSailMesh.Hit> hit = PaintableSailMesh.pick(
-                previewShip,
-                leftPos + PREVIEW_X,
-                topPos + PREVIEW_Y,
-                leftPos + PREVIEW_X + PREVIEW_WIDTH,
-                topPos + PREVIEW_Y + PREVIEW_HEIGHT,
-                previewYaw,
-                previewPitch,
-                previewZoom,
-                previewPanX,
-                previewPanY,
-                lastMouseX,
-                lastMouseY,
-                hiddenElements
-        );
-        if (hit.isEmpty()) {
-            return Optional.empty();
-        }
-
-        PaintableSailMesh.Hit value = hit.get();
-        if (!isHitInSelection(value)) {
-            return Optional.empty();
-        }
-        return Optional.of(value.faceIndex());
+        return surface.pick(lastMouseX, lastMouseY).filter(surface::accepts).map(PaintableSailMesh.Hit::faceIndex);
     }
 
     private boolean selectElementAtPreview(double mouseX, double mouseY) {
-        Optional<PaintableSailMesh.Hit> hit = PaintableSailMesh.pick(
-                previewShip,
-                leftPos + PREVIEW_X,
-                topPos + PREVIEW_Y,
-                leftPos + PREVIEW_X + PREVIEW_WIDTH,
-                topPos + PREVIEW_Y + PREVIEW_HEIGHT,
-                previewYaw,
-                previewPitch,
-                previewZoom,
-                previewPanX,
-                previewPanY,
-                mouseX,
-                mouseY,
-                Set.of()
-        );
-        hit.ifPresent(value -> {
-            if (!hasControlDown() && !hasShiftDown()) {
-                selectedElementIds.clear();
-            }
-            if (!selectedElementIds.add(value.elementId()) && hasControlDown()) {
-                selectedElementIds.remove(value.elementId());
-            }
-            scrollSelectionIntoView(value.elementId());
-        });
+        Optional<PaintableSailMesh.Hit> hit = pickAtPreview(mouseX, mouseY, Set.of());
+        hit.ifPresent(value -> parts.selectHit(value.elementId(), hasControlDown(), hasShiftDown(), visibleElementRows()));
         return true;
-    }
-
-    private void toggleElementHidden(String elementId) {
-        if (!hiddenElements.add(elementId)) {
-            hiddenElements.remove(elementId);
-        }
     }
 
     private void changePreviewType(ShipPreviewType newPreviewType) {
@@ -1901,18 +1381,16 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return;
         }
         HeraldryPatternData current = currentData();
-        if (current == null || !sendPatternTransfer(false, current)) {
+        if (current == null || !draftSync.transfer(false, current)) {
             return;
         }
-        session.markSaved();
-        clearPixelSelectionOverlay();
+        selection.clearPixelSelectionOverlay();
         session.switchShip(newPreviewType);
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
         }
-        switchElementContext();
-        previewPanX = 0.0F;
-        previewPanY = 0.0F;
+        parts.switchContext(session.shipType(), previewStage);
+        camera.center();
         rebuildPreviewShip();
     }
 
@@ -1921,9 +1399,9 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (clampedStage == previewStage) {
             return;
         }
-        clearPixelSelectionOverlay();
+        selection.clearPixelSelectionOverlay();
         previewStage = clampedStage;
-        switchElementContext();
+        parts.switchContext(session.shipType(), previewStage);
         PreviewShipFactory.setSailState(previewShip, previewStage);
     }
 
@@ -1932,53 +1410,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         if (data == null) {
             return;
         }
-        if (sendPatternTransfer(true, data)) {
-            session.markSaved();
-        }
-    }
-
-    private void sendDraftUpdate() {
-        HeraldryPatternData data = currentData();
-        if (data == null) {
-            return;
-        }
-        sendPatternTransfer(false, data);
-        session.markSaved();
-    }
-
-    private boolean sendPatternTransfer(boolean export, HeraldryPatternData data) {
-        byte[] encoded;
-        try {
-            encoded = HeraldryPatternTransfer.encode(data.toTag());
-        } catch (IOException exception) {
-            showStatus(Component.translatable("smallshipsheraldry.message.pattern_too_complex"));
-            return false;
-        }
-
-        int transferId = ++nextTransferId;
-        int chunkCount = HeraldryPatternTransfer.chunkCount(encoded.length);
-        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
-            byte[] chunk = HeraldryPatternTransfer.chunk(encoded, chunkIndex);
-            if (export) {
-                NetworkManager.sendToServer(new ExportPatternPayload(
-                        menu.getBlockPos(), transferId, chunkIndex, chunkCount, encoded.length, chunk
-                ));
-            } else {
-                NetworkManager.sendToServer(new TableDraftUpdatePayload(
-                        menu.getBlockPos(), transferId, chunkIndex, chunkCount, encoded.length, chunk
-                ));
-            }
-        }
-        return true;
-    }
-
-    private void requestDraftSync() {
-        if (draftSyncRequested) {
-            return;
-        }
-
-        draftSyncRequested = true;
-        NetworkManager.sendToServer(new TableDraftRequestPayload(menu.getBlockPos()));
+        draftSync.transfer(true, data);
     }
 
     public static void handleDraftSync(
@@ -2003,34 +1435,28 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             boolean first,
             boolean last
     ) {
-        if (!menu.getBlockPos().equals(blockPos) || patternTag == null) {
+        if (!draftSync.receive(blockPos, activeType, draftType, patternTag, first, last)) {
             return;
         }
-        if (first) {
-            pendingDraftSync = HeraldryTableDrafts.blank().withActiveShipType(activeType);
-        }
-        HeraldryPatternData.tryFromRootTag(patternTag)
-                .filter(data -> data.shipType() == draftType)
-                .ifPresent(data -> pendingDraftSync = pendingDraftSync.withDraft(data).withActiveShipType(activeType));
-        if (!last || !session.applyServerSync(pendingDraftSync)) {
-            return;
-        }
-        clearPixelSelectionOverlay();
+        selection.clearPixelSelectionOverlay();
         if (draftTexture != null) {
             draftTexture.replacePixels(session.pixels());
         }
-        hiddenElementsByContext.clear();
-        selectedElementsByContext.clear();
-        switchElementContext();
+        parts.clearContexts();
+        parts.switchContext(session.shipType(), previewStage);
         rebuildPreviewShip();
     }
 
     private void sendSlotAction(int slot, int action) {
-        NetworkManager.sendToServer(new TableSlotActionPayload(menu.getBlockPos(), slot, action));
+        draftSync.slotAction(slot, action);
     }
 
     private void rebuildPreviewShip() {
         previewShip = PreviewShipFactory.create(session.shipType(), session.pattern().withShipType(session.shipType()), previewStage);
+        if (previewShip != null && (framing == null || framedType != session.shipType())) {
+            framing = PreviewShipRenderer.measure(previewShip);
+            framedType = session.shipType();
+        }
     }
 
     private void updatePreview() {
@@ -2065,7 +1491,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             draftTexture.replacePixels(session.pixels());
         }
         if (restore.shipChanged()) {
-            switchElementContext();
+            parts.switchContext(session.shipType(), previewStage);
             rebuildPreviewShip();
         } else {
             updatePreview();
@@ -2117,17 +1543,26 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private void renderEditorTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        if (editorMode == EditorMode.PARTS
-                && isInside(mouseX, mouseY, leftPos + RIGHT_X + 46, topPos + 88, 38, 18)) {
-            guiGraphics.renderTooltip(font, Component.translatable("smallshipsheraldry.tooltip.isolate"), mouseX, mouseY);
+        if (editorMode == EditorMode.PARTS && isInside(mouseX, mouseY, leftPos + TOOL_X, topPos + TOOL_Y, TOOL_WIDTH, TOOL_HEIGHT)) {
+            drawTooltip(guiGraphics, Component.translatable(partsListVisible
+                    ? "smallshipsheraldry.parts.collapse" : "smallshipsheraldry.parts.expand"), mouseX, mouseY);
             return;
         }
-        if (editorMode == EditorMode.PARTS && isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, ELEMENT_HEIGHT)) {
+        if (isInside(mouseX, mouseY, leftPos + layout.shipNameX(), topPos + layout.navigationY(), layout.shipNameWidth(), 18)) {
+            drawTooltip(guiGraphics, session.shipType().getDisplayName(), mouseX, mouseY);
+            return;
+        }
+        if (editorMode == EditorMode.PARTS
+                && isInside(mouseX, mouseY, leftPos + rightX() + 50, topPos + 92, 42, 18)) {
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.tooltip.isolate"), mouseX, mouseY);
+            return;
+        }
+        if (elementListVisible() && isInside(mouseX, mouseY, leftPos + ELEMENT_X, topPos + ELEMENT_Y, ELEMENT_WIDTH, previewHeight())) {
             int row = (mouseY - (topPos + ELEMENT_Y)) / ELEMENT_ROW_HEIGHT;
-            int index = elementScroll + row;
-            List<PaintableSailMesh.Element> elements = elements();
+            int index = parts.scroll() + row;
+            List<PaintableSailMesh.Element> elements = parts.elements();
             if (index >= 0 && index < elements.size()) {
-                guiGraphics.renderTooltip(font, Component.literal(elements.get(index).id()), mouseX, mouseY);
+                drawTooltip(guiGraphics, Component.literal(elements.get(index).id()), mouseX, mouseY);
             }
             return;
         }
@@ -2135,21 +1570,26 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
             return;
         }
         if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
-                && isInside(mouseX, mouseY, leftPos + 76, topPos + SYMMETRY_Y, 18, 18)) {
-            guiGraphics.renderTooltip(font, Component.translatable("smallshipsheraldry.tooltip.mirror_vertical"), mouseX, mouseY);
+                && isInside(mouseX, mouseY, leftPos + rightX() + 4, topPos + STROKE_Y, 88, 18)) {
+            drawTooltip(guiGraphics, font.split(Component.translatable("smallshipsheraldry.tooltip.stroke_mode"), 180), mouseX, mouseY);
             return;
         }
         if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
-                && isInside(mouseX, mouseY, leftPos + 96, topPos + SYMMETRY_Y, 18, 18)) {
-            guiGraphics.renderTooltip(font, Component.translatable("smallshipsheraldry.tooltip.mirror_horizontal"), mouseX, mouseY);
+                && isInside(mouseX, mouseY, leftPos + rightX() + 50, topPos + SYMMETRY_Y, 18, 18)) {
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.tooltip.mirror_vertical"), mouseX, mouseY);
+            return;
+        }
+        if ((activeTool == PaintTool.BRUSH || activeTool == PaintTool.ERASER)
+                && isInside(mouseX, mouseY, leftPos + rightX() + 74, topPos + SYMMETRY_Y, 18, 18)) {
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.tooltip.mirror_horizontal"), mouseX, mouseY);
             return;
         }
         PaintTool[] tools = PaintTool.values();
         for (int index = 0; index < tools.length; index++) {
-            int x = leftPos + TOOL_X + index * (TOOL_WIDTH + TOOL_GAP);
-            int y = topPos + TOOL_Y;
+            int x = leftPos + TOOL_X;
+            int y = topPos + TOOL_Y + index * (TOOL_HEIGHT + TOOL_GAP);
             if (isInside(mouseX, mouseY, x, y, TOOL_WIDTH, TOOL_HEIGHT)) {
-                guiGraphics.renderTooltip(font, tools[index].displayName(), mouseX, mouseY);
+                drawTooltip(guiGraphics, tools[index].displayName(), mouseX, mouseY);
                 return;
             }
         }
@@ -2158,26 +1598,34 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     private void renderTableSlotTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int slot = tableSlotAt(mouseX, mouseY);
         if (slot == HeraldryTableBlockEntity.PAPER_SLOT) {
-            guiGraphics.renderTooltip(font, Component.translatable("smallshipsheraldry.tooltip.paper_slot"), mouseX, mouseY);
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.tooltip.paper_slot"), mouseX, mouseY);
+        } else if (slot == HeraldryTableBlockEntity.RESULT_SLOT && !menu.getResultStack().isEmpty()) {
+            drawTooltip(guiGraphics, menu.getResultStack(), mouseX, mouseY);
         } else if (slot == HeraldryTableBlockEntity.RESULT_SLOT && menu.getResultStack().isEmpty()) {
-            guiGraphics.renderTooltip(font, Component.translatable("smallshipsheraldry.tooltip.result_slot"), mouseX, mouseY);
+            drawTooltip(guiGraphics, Component.translatable("smallshipsheraldry.tooltip.result_slot"), mouseX, mouseY);
         }
     }
 
-    private void zoomPreviewAt(double mouseX, double mouseY, double amount) {
-        float oldZoom = previewZoom;
-        float zoomStep = amount > 0.0D ? 1.14F : 1.0F / 1.14F;
-        float newZoom = Mth.clamp(oldZoom * zoomStep, 0.30F, 10.0F);
-        if (Math.abs(newZoom - oldZoom) < 0.0001F) {
-            return;
-        }
+    private void drawTooltip(GuiGraphics graphics, Component text, int mouseX, int mouseY) {
+        drawTooltip(graphics, font.split(text, Math.min(220, width - 16)), mouseX, mouseY);
+    }
 
-        float baseCenterX = leftPos + PREVIEW_X + PREVIEW_WIDTH * 0.5F;
-        float baseCenterY = topPos + PREVIEW_Y + PREVIEW_HEIGHT * 0.5F + PaintableSailMesh.EDITOR_VERTICAL_OFFSET;
-        float ratio = newZoom / oldZoom;
-        previewPanX = (float) (mouseX - baseCenterX - (mouseX - baseCenterX - previewPanX) * ratio);
-        previewPanY = (float) (mouseY - baseCenterY - (mouseY - baseCenterY - previewPanY) * ratio);
-        previewZoom = newZoom;
+    private void drawTooltip(GuiGraphics graphics, ItemStack stack, int mouseX, int mouseY) {
+        List<FormattedCharSequence> lines = net.minecraft.client.gui.screens.Screen.getTooltipFromItem(minecraft, stack).stream()
+                .flatMap(line -> font.split(line, Math.min(220, width - 16)).stream()).toList();
+        drawTooltip(graphics, lines, mouseX, mouseY);
+    }
+
+    private void drawTooltip(GuiGraphics graphics, List<FormattedCharSequence> lines, int mouseX, int mouseY) {
+        graphics.renderTooltip(font, lines, (screenWidth, screenHeight, x, y, tooltipWidth, tooltipHeight) ->
+                net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner.INSTANCE.positionTooltip(
+                        width, height, x, y, tooltipWidth, tooltipHeight), mouseX, mouseY);
+    }
+
+    private void zoomPreviewAt(double mouseX, double mouseY, double amount) {
+        camera.zoomAt(mouseX, mouseY, amount,
+                leftPos + previewX() + previewWidth() * 0.5F,
+                topPos + PREVIEW_Y + previewHeight() * 0.5F);
     }
 
     private static String shortElementName(String elementId) {
@@ -2185,162 +1633,45 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         return slash >= 0 ? elementId.substring(slash + 1) : elementId;
     }
 
-    private static double distanceSquared(double x, double y, double targetX, double targetY) {
-        double deltaX = x - targetX;
-        double deltaY = y - targetY;
-        return deltaX * deltaX + deltaY * deltaY;
-    }
-
-    private List<PaintableSailMesh.Element> elements() {
-        List<PaintableSailMesh.Element> elements = new ArrayList<>(PaintableSailMesh.elements(session.shipType(), previewStage));
-        elements.sort((first, second) -> {
-            int category = Integer.compare(elementCategory(first.id()), elementCategory(second.id()));
-            return category != 0 ? category : first.id().compareTo(second.id());
-        });
-        return elements;
-    }
-
-    private Component friendlyElementName(List<PaintableSailMesh.Element> elements, int index) {
-        PaintableSailMesh.Element element = elements.get(index);
-        int category = elementCategory(element.id());
-        int number = 0;
-        for (int current = 0; current <= index; current++) {
-            if (elementCategory(elements.get(current).id()) == category) {
-                number++;
-            }
-        }
-        String key = switch (category) {
-            case 0 -> "smallshipsheraldry.part.sail_number";
-            case 1 -> "smallshipsheraldry.part.rope_number";
-            default -> "smallshipsheraldry.part.other_number";
-        };
-        return Component.translatable(key, number);
-    }
-
-    private static int elementCategory(String elementId) {
-        String normalized = elementId.toLowerCase(java.util.Locale.ROOT);
-        if (normalized.contains("rope")) {
-            return 1;
-        }
-        if (normalized.contains("sail") || normalized.contains("segel") || normalized.contains("base")) {
-            return 0;
-        }
-        return 2;
-    }
-
     private int visibleElementRows() {
-        return ELEMENT_HEIGHT / ELEMENT_ROW_HEIGHT;
-    }
-
-    private void scrollSelectionIntoView(String elementId) {
-        List<PaintableSailMesh.Element> elements = elements();
-        for (int index = 0; index < elements.size(); index++) {
-            if (!elements.get(index).id().equals(elementId)) {
-                continue;
-            }
-            int rows = visibleElementRows();
-            if (index < elementScroll) {
-                elementScroll = index;
-            } else if (index >= elementScroll + rows) {
-                elementScroll = Math.max(0, index - rows + 1);
-            }
-            selectionAnchorIndex = index;
-            return;
-        }
-    }
-
-    private void switchElementContext() {
-        String key = session.shipType().serializedName() + ":" + previewStage;
-        hiddenElements = hiddenElementsByContext.computeIfAbsent(key, ignored -> new LinkedHashSet<>());
-        selectedElementIds = selectedElementsByContext.computeIfAbsent(key, ignored -> new LinkedHashSet<>());
-        elementScroll = 0;
-        selectionAnchorIndex = -1;
+        return previewHeight() / ELEMENT_ROW_HEIGHT;
     }
 
     private void drawControl(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean selected, Component text) {
+        drawControl(guiGraphics, x, y, width, height, selected, true, text);
+    }
+
+    private void drawControl(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean selected, boolean enabled, Component text) {
         boolean hovered = isInside(lastMouseX, lastMouseY, x, y, width, height);
-        guiGraphics.fill(x, y, x + width, y + height, selected || hovered ? HeraldryGuiTheme.GOLD_LIGHT : HeraldryGuiTheme.FRAME_DARK);
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, selected || hovered ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.PAPER_ALT);
-        Component clipped = Component.literal(font.plainSubstrByWidth(text.getString(), Math.max(1, width - 4)));
-        drawCenteredNoShadow(guiGraphics, clipped, x + width / 2, y + (height - 8) / 2, HeraldryGuiTheme.INK);
+        HeraldryGuiTheme.drawButton(guiGraphics, font, x, y, width, height, selected, hovered, enabled, text, 2);
+    }
+
+    private void drawToggleControl(GuiGraphics graphics, int x, int y, int width, int height, boolean selected, Component text) {
+        HeraldryGuiTheme.drawToggle(graphics, x, y, width, height, selected,
+                isInside(lastMouseX, lastMouseY, x, y, width, height));
+        Component clipped = Component.literal(font.plainSubstrByWidth(text.getString(), width - 6));
+        drawCenteredNoShadow(graphics, clipped, x + width / 2, y + (height - 8) / 2,
+                selected ? HeraldryGuiTheme.BUTTON_TEXT : HeraldryGuiTheme.INK);
+    }
+
+    private void drawChoiceControl(GuiGraphics graphics, int x, int y, int width, Component text) {
+        boolean hovered = isInside(lastMouseX, lastMouseY, x, y, width, 18);
+        HeraldryGuiTheme.drawButton(graphics, x, y, width, 18, choices.isOpen(), hovered, true);
+        graphics.drawString(font, font.plainSubstrByWidth(text.getString(), width - 26), x + 5, y + 5,
+                HeraldryGuiTheme.BUTTON_TEXT, false);
+        int center = x + width - 9;
+        for (int row = 0; row < 3; row++) {
+            int arrowY = y + (choices.isOpen() ? 9 - row : 7 + row);
+            graphics.fill(center - 2 + row, arrowY, center + 3 - row, arrowY + 1, HeraldryGuiTheme.BUTTON_TEXT);
+        }
     }
 
     private void drawIconControl(GuiGraphics guiGraphics, int x, int y, int width, int height, boolean selected, int iconU) {
         boolean hovered = isInside(lastMouseX, lastMouseY, x, y, width, height);
-        guiGraphics.fill(x, y, x + width, y + height, selected || hovered ? HeraldryGuiTheme.GOLD_LIGHT : HeraldryGuiTheme.FRAME_DARK);
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, selected || hovered ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.PAPER_ALT);
+        HeraldryGuiTheme.drawToggle(guiGraphics, x, y, width, height, selected, hovered);
+        guiGraphics.setColor(selected ? 1 : 0.22F, selected ? 1 : 0.22F, selected ? 1 : 0.22F, 1);
         guiGraphics.blit(TOOL_ICONS, x + (width - 16) / 2, y + (height - 16) / 2, iconU, 0, 16, 16, TOOL_TEXTURE_WIDTH, 16);
-    }
-
-    private void drawPixelSelection(GuiGraphics guiGraphics) {
-        if (editorMode != EditorMode.PAINT || activeTool != PaintTool.SELECT) {
-            return;
-        }
-        SelectionRect rect = pixelSelection();
-        if (rect == null && !pasteActive) {
-            return;
-        }
-
-        int previewLeft = leftPos + PREVIEW_X;
-        int previewTop = topPos + PREVIEW_Y;
-        guiGraphics.flush();
-        RenderSystem.disableDepthTest();
-        RenderSystem.enableBlend();
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0.0F, 0.0F, 500.0F);
-        guiGraphics.enableScissor(previewLeft, previewTop, previewLeft + PREVIEW_WIDTH, previewTop + PREVIEW_HEIGHT);
-        try {
-            if (pasteActive) {
-                int markerX = previewLeft + pasteX;
-                int markerY = previewTop + pasteY;
-                guiGraphics.fill(markerX - 4, markerY, markerX + 5, markerY + 1, HeraldryGuiTheme.GOLD_LIGHT);
-                guiGraphics.fill(markerX, markerY - 4, markerX + 1, markerY + 5, HeraldryGuiTheme.GOLD_LIGHT);
-                guiGraphics.fill(markerX, markerY, markerX + 1, markerY + 1, 0xFFFFFFFF);
-            } else if (rect != null) {
-                Map<Integer, Integer> halfSizes = new HashMap<>();
-                for (PaintableSailMesh.ScreenPixel pixel : surfaceSelection) {
-                    int halfSize = halfSizes.computeIfAbsent(
-                            pixel.hit().faceIndex(),
-                            ignored -> Math.max(1, Mth.ceil(
-                                    PaintableSailMesh.projectedPixelScale(previewShip, pixel.hit()) * 0.42F
-                            ))
-                    );
-                    int centerX = Mth.floor(pixel.screenX());
-                    int centerY = Mth.floor(pixel.screenY());
-                    guiGraphics.fill(
-                            centerX - halfSize,
-                            centerY - halfSize,
-                            centerX + halfSize + 1,
-                            centerY + halfSize + 1,
-                            0x55E7C778
-                    );
-                    guiGraphics.fill(centerX, centerY, centerX + 1, centerY + 1, HeraldryGuiTheme.GOLD_LIGHT);
-                }
-            }
-        } finally {
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            RenderSystem.disableBlend();
-            guiGraphics.disableScissor();
-            guiGraphics.pose().popPose();
-            guiGraphics.flush();
-            RenderSystem.enableDepthTest();
-        }
-    }
-
-    private void drawLinePreview(GuiGraphics guiGraphics) {
-        double deltaX = strokeEndScreenX - strokeStartScreenX;
-        double deltaY = strokeEndScreenY - strokeStartScreenY;
-        float length = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        float thickness = lineScreenThickness();
-        guiGraphics.enableScissor(leftPos + PREVIEW_X, topPos + PREVIEW_Y,
-                leftPos + PREVIEW_X + PREVIEW_WIDTH, topPos + PREVIEW_Y + PREVIEW_HEIGHT);
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(strokeStartScreenX, strokeStartScreenY, 0.0D);
-        guiGraphics.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(deltaY, deltaX)));
-        int half = Math.max(1, Mth.ceil(thickness * 0.5F));
-        guiGraphics.fill(0, -half, Math.max(1, Mth.ceil(length)), half, colorPicker.color() | 0xA0000000);
-        guiGraphics.pose().popPose();
-        guiGraphics.disableScissor();
+        guiGraphics.setColor(1, 1, 1, 1);
     }
 
     private void drawCenteredNoShadow(GuiGraphics guiGraphics, Component text, int centerX, int y, int color) {
@@ -2348,72 +1679,25 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
     }
 
     private boolean isInsidePreview(double mouseX, double mouseY) {
-        return isInside(mouseX, mouseY, leftPos + PREVIEW_X, topPos + PREVIEW_Y, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        if (elementListVisible() && isInside(mouseX, mouseY, leftPos + ELEMENT_X - 1, topPos + ELEMENT_Y - 1,
+                ELEMENT_WIDTH + 2, previewHeight() + 2)) return false;
+        return isInside(mouseX, mouseY, leftPos + previewX(), topPos + PREVIEW_Y, previewWidth(), previewHeight());
     }
 
-    private static boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
+    private final class EditorSurface implements HeraldryEditorSurface {
+        public Ship ship() { return previewShip; }
+        public int stage() { return previewStage; }
+        public Bounds bounds() { return new Bounds(leftPos + previewX(), topPos + PREVIEW_Y, previewWidth(), previewHeight()); }
+        public Set<String> selectedElements() { return parts.selected(); }
+        public Set<String> hiddenElements() { return parts.hidden(); }
+        public Optional<PaintableSailMesh.Hit> pick(double x, double y) { return pickAtPreview(x, y, parts.hidden()); }
+        public HeraldryDraftTexture texture() { return draftTexture; }
     }
 
-    private record SelectionRect(int x, int y, int width, int height) {
-    }
-
-    private record SelectionClipboard(
-            int width,
-            int height,
-            List<PaintableSailMesh.ClipboardPixel> pixels,
-            int originX,
-            int originY
-    ) {
-    }
-
-    private record CapturedPixel(PaintableSailMesh.Hit hit, double screenX, double screenY, int color) {
-    }
-
-    private enum PaintTool {
-        BRUSH("brush", true, 0),
-        ERASER("eraser", true, 16),
-        PICKER("picker", false, 32),
-        FILL("fill", false, 48),
-        SELECT("select", false, 128);
-
-        private final String label;
-        private final boolean drags;
-        private final int iconU;
-
-        PaintTool(String label, boolean drags, int iconU) {
-            this.label = label;
-            this.drags = drags;
-            this.iconU = iconU;
-        }
-
-        private Component displayName() {
-            return Component.translatable("smallshipsheraldry.tool." + label);
-        }
-
-        private boolean drags() {
-            return drags;
-        }
-
-        private String label() {
-            return label;
-        }
-
-        private int iconU() {
-            return iconU;
-        }
-
-        private static PaintTool byName(String name) {
-            if ("fill_face".equalsIgnoreCase(name)) {
-                return FILL;
-            }
-            for (PaintTool tool : values()) {
-                if (tool.label.equalsIgnoreCase(name)) {
-                    return tool;
-                }
-            }
-            return BRUSH;
-        }
+    private final class EditorEdits implements HeraldryEditorEdits {
+        public boolean pushUndo() { return HeraldryTableScreen.this.pushUndo(); }
+        public void commit() { commitPaintBuffer(); }
+        public void status(Component message) { showStatus(message); }
     }
 
     private enum EditorMode {
@@ -2442,69 +1726,6 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                 }
             }
             return PAINT;
-        }
-    }
-
-    private enum StrokeMode {
-        FREEHAND("freehand"),
-        LINE("line");
-
-        private final String label;
-
-        StrokeMode(String label) {
-            this.label = label;
-        }
-
-        private String label() {
-            return label;
-        }
-
-        private static StrokeMode byName(String name) {
-            for (StrokeMode mode : values()) {
-                if (mode.label.equalsIgnoreCase(name)) {
-                    return mode;
-                }
-            }
-            return FREEHAND;
-        }
-    }
-
-    private enum FillMode {
-        AREA("area"),
-        FACE("face"),
-        REPLACE("replace");
-
-        private final String label;
-
-        FillMode(String label) {
-            this.label = label;
-        }
-
-        private String label() {
-            return label;
-        }
-
-        private Component displayName() {
-            return Component.translatable("smallshipsheraldry.fill." + label);
-        }
-
-        private FillMode next() {
-            FillMode[] modes = values();
-            return modes[(ordinal() + 1) % modes.length];
-        }
-
-        private FillMode previous() {
-            FillMode[] modes = values();
-            return modes[(ordinal() + values().length - 1) % modes.length];
-        }
-
-        private static FillMode byName(String name) {
-            for (FillMode mode : values()) {
-                if (mode.label.equalsIgnoreCase(name)) {
-                    return mode;
-                }
-            }
-            return AREA;
         }
     }
 
