@@ -11,6 +11,8 @@ public interface SailBannerAccess {
 
     void smallshipsheraldry$setOriginalSailColor(String color);
 
+    void smallshipsheraldry$applyPatternSailColor(String color);
+
     default boolean smallshipsheraldry$hasSailBanner() {
         return !smallshipsheraldry$getSailBanner().isEmpty();
     }

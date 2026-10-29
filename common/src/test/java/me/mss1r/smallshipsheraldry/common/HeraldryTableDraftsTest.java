@@ -36,4 +36,17 @@ class HeraldryTableDraftsTest {
         assertEquals(galley.visualHash(), restored.get(ShipPreviewType.GALLEY).visualHash());
         assertEquals(ShipPreviewType.DRAKKAR, restored.get(ShipPreviewType.DRAKKAR).shipType());
     }
+
+    @Test
+    void addonDraftsDoNotDependOnTheAddonBeingLoadedToKeepTheirData() {
+        HeraldryTableDrafts original = HeraldryTableDrafts.blank();
+        for (ShipPreviewType type : ShipPreviewType.values()) {
+            original = original.withDraft(HeraldryPatternData.fromMeshPixels("saved", type, 0xFF123456, new int[]{0xFFABCDEF}));
+        }
+        HeraldryTableDrafts restored = HeraldryTableDrafts.fromTag(original.toTag());
+        assertEquals(ShipPreviewType.TRANSPORT_DRAKKAR, restored.activeShipType());
+        for (ShipPreviewType type : ShipPreviewType.values()) {
+            assertEquals(original.get(type).visualHash(), restored.get(type).visualHash());
+        }
+    }
 }

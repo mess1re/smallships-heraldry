@@ -7,15 +7,9 @@ import com.mojang.math.Axis;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
-import me.mss1r.smallshipsheraldry.access.SailBannerAccess;
 import me.mss1r.smallshipsheraldry.common.HeraldryPatternData;
 import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -30,13 +24,13 @@ import java.util.Optional;
 import java.util.Set;
 
 public final class PaintableSailMesh {
-    private static final Map<ShipPreviewType, SailModel> EDITOR_MODELS = new HashMap<>();
     private static final Map<ShipPreviewType, List<Map<Integer, Face>>> FACE_LOOKUPS = new EnumMap<>(ShipPreviewType.class);
     private static final ThreadLocal<Set<String>> EDITOR_HIDDEN_ELEMENTS = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> EDITOR_ENTITY_SAILS_SUPPRESSED = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> EDITOR_GRID_VISIBLE = new ThreadLocal<>();
     private static final ThreadLocal<Integer> EDITOR_GRID_FACE_INDEX = new ThreadLocal<>();
     private static final ThreadLocal<Integer> EDITOR_HIGHLIGHT_FACE_INDEX = new ThreadLocal<>();
+    private static final ThreadLocal<Float> EDITOR_GUI_SCALE = new ThreadLocal<>();
     private static EditorPickCache lastEditorPickCache;
     private static final float EDITOR_BASE_SCALE = 12.0F;
     public static final float PAINT_PIXELS_PER_MODEL_UNIT = 15.0F;
@@ -46,7 +40,7 @@ public final class PaintableSailMesh {
     }
 
     public static void verifyModelCompatibility() {
-        for (ShipPreviewType shipType : ShipPreviewType.values()) {
+        for (ShipPreviewType shipType : ShipPreviewType.availableTypes()) {
             SailMeshDefinitionBuilder.Definition definition = definition(shipType);
             if (definition.isEmpty()) {
                 throw new IllegalStateException("No paintable sail geometry found for " + shipType.serializedName());
@@ -127,15 +121,11 @@ public final class PaintableSailMesh {
         EDITOR_HIGHLIGHT_FACE_INDEX.remove();
     }
 
-    public static Collection<Element> elements(ShipPreviewType shipType) {
-        return definition(shipType).elements();
-    }
-
     public static Collection<Element> elements(ShipPreviewType shipType, int state) {
         return definition(shipType).elementsForState(Mth.clamp(state, 0, 4));
     }
 
-    public static void render(Ship ship, SailModel sailModel, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
+    public static void render(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
         ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
         SailMeshDefinitionBuilder.Definition definition = definition(shipType);
         if (definition.isEmpty()) {
@@ -151,7 +141,7 @@ public final class PaintableSailMesh {
         );
     }
 
-    public static void renderOriginal(Ship ship, SailModel sailModel, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
+    public static void renderOriginal(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
         ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
         SailMeshDefinitionBuilder.Definition definition = definition(shipType);
         if (definition.isEmpty()) {
@@ -166,7 +156,7 @@ public final class PaintableSailMesh {
         }
     }
 
-    public static void renderGrid(Ship ship, SailModel sailModel, PoseStack poseStack, VertexConsumer vertexConsumer, Set<String> hiddenElements) {
+    public static void renderGrid(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, Set<String> hiddenElements) {
         Integer targetFaceIndex = EDITOR_GRID_FACE_INDEX.get();
         if (targetFaceIndex == null) {
             return;
@@ -190,7 +180,7 @@ public final class PaintableSailMesh {
         }
     }
 
-    public static void renderHighlight(Ship ship, SailModel sailModel, PoseStack poseStack, VertexConsumer vertexConsumer, Set<String> hiddenElements) {
+    public static void renderHighlight(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, Set<String> hiddenElements) {
         Integer targetFaceIndex = EDITOR_HIGHLIGHT_FACE_INDEX.get();
         if (targetFaceIndex == null) {
             return;
@@ -211,40 +201,6 @@ public final class PaintableSailMesh {
             }
             SailMeshRenderer.renderHighlight(face, poseStack, vertexConsumer);
             return;
-        }
-    }
-
-    public static void renderPreviewSails(
-            Ship ship,
-            GuiGraphics guiGraphics,
-            Set<String> hiddenElements
-    ) {
-        if (ship == null) {
-            return;
-        }
-
-        SailModel sailModel = editorModel(ShipPreviewType.fromShip(ship));
-        if (sailModel == null) {
-            return;
-        }
-
-        SailModelBridge.setupAnim(sailModel, ship, 1.0F);
-        guiGraphics.pose().pushPose();
-        applySmallShipsSailTransform(guiGraphics.pose());
-        try {
-            VertexConsumer baseConsumer = guiGraphics.bufferSource().getBuffer(
-                    SailModelBridge.renderType(sailModel, SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location)
-            );
-            renderOriginal(ship, sailModel, guiGraphics.pose(), baseConsumer, LightTexture.FULL_BRIGHT, hiddenElements);
-
-            ItemStack sailPattern = ((SailBannerAccess) ship).smallshipsheraldry$getSailBanner();
-            ResourceLocation overlayTexture = sailPattern.isEmpty() ? null : SailBannerTextureCache.getTexture(ship, sailPattern);
-            if (overlayTexture != null) {
-                VertexConsumer overlayConsumer = guiGraphics.bufferSource().getBuffer(RenderType.entityTranslucent(overlayTexture));
-                render(ship, sailModel, guiGraphics.pose(), overlayConsumer, LightTexture.FULL_BRIGHT, hiddenElements);
-            }
-        } finally {
-            guiGraphics.pose().popPose();
         }
     }
 
@@ -274,6 +230,12 @@ public final class PaintableSailMesh {
             return Optional.empty();
         }
         return SailMeshPicker.pick(index, mouseX, mouseY, hiddenElements);
+    }
+
+    public static Optional<ScreenPixel> projectPixel(Ship ship, Hit hit) {
+        if (ship == null || hit == null) return Optional.empty();
+        return cachedEditorIndex(ship).flatMap(index -> index.face(hit.faceIndex()))
+                .map(face -> SailClipboardMapper.projectPixel(face, hit));
     }
 
     public static float projectedPixelScale(Ship ship, Hit hit) {
@@ -404,14 +366,26 @@ public final class PaintableSailMesh {
             return;
         }
 
+        poseStack = EditorPickTransform.logicalPose(poseStack, EDITOR_GUI_SCALE.get() == null ? 1 : EDITOR_GUI_SCALE.get());
         int state = currentSailState(ship);
         int transformHash = transformHash(poseStack.last().pose());
         EditorPickCache cached = lastEditorPickCache;
         if (cached != null && cached.ship() == ship && cached.state() == state && cached.transformHash() == transformHash) {
             return;
         }
+        // Baking uses the shared registry model for all stages. Restore this ship's
+        // pose before sampling its visible faces, including the very first frame.
+        SailModelBridge.setupAnim(sailModel, ship, 1.0F);
         List<Face> faces = SailMeshDefinitionBuilder.collectFaces(sailModel, poseStack, definition, state);
         lastEditorPickCache = new EditorPickCache(ship, state, transformHash, SailMeshPicker.index(faces));
+    }
+
+    public static void setEditorGuiScale(float scale) {
+        EDITOR_GUI_SCALE.set(scale);
+    }
+
+    public static void clearEditorGuiScale() {
+        EDITOR_GUI_SCALE.remove();
     }
 
     private static Optional<SailMeshPicker.Index> cachedEditorIndex(Ship ship) {
@@ -595,7 +569,7 @@ public final class PaintableSailMesh {
             return List.of();
         }
 
-        SailModel sailModel = editorModel(shipType);
+        SailModel sailModel = SailModelBridge.model(ship);
         if (sailModel == null) {
             return List.of();
         }
@@ -625,10 +599,6 @@ public final class PaintableSailMesh {
     public static void applySmallShipsSailTransform(PoseStack poseStack) {
         poseStack.scale(-1.3F, -1.3F, 1.3F);
         poseStack.mulPose(Axis.YP.rotationDegrees(270.0F));
-    }
-
-    private static SailModel editorModel(ShipPreviewType shipType) {
-        return EDITOR_MODELS.computeIfAbsent(shipType, SailMeshDefinitionBuilder::createModel);
     }
 
     private static SailMeshDefinitionBuilder.Definition definition(ShipPreviewType shipType) {

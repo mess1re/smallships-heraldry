@@ -135,5 +135,12 @@
   "advancements.smallshipsheraldry.prepare_heraldry.title": "Парусная мастерская",
   "advancements.smallshipsheraldry.prepare_heraldry.description": "Создайте геральдический стол",
   "advancements.smallshipsheraldry.print_pattern.title": "Под своим знаком",
-  "advancements.smallshipsheraldry.print_pattern.description": "Напечатайте собственный узор для паруса"
+  "advancements.smallshipsheraldry.print_pattern.description": "Напечатайте собственный узор для паруса",
+  "smallshipsheraldry.preview.fishing_boat": "Рыбацкая лодка",
+  "smallshipsheraldry.preview.early_cog": "Ранний когг",
+  "smallshipsheraldry.preview.early_caravel": "Ранняя каравелла",
+  "smallshipsheraldry.preview.knarr": "Кнарр",
+  "smallshipsheraldry.preview.longship": "Лангскип",
+  "smallshipsheraldry.preview.transport_drakkar": "Транспортный драккар",
+  "smallshipsheraldry.message.ship_unavailable": "Аддон с этим кораблём не установлен."
 }

@@ -25,6 +25,10 @@ dependencies {
     modApi "dev.architectury:architectury-neoforge:${rootProject.architectury_api_version}"
     modRuntimeOnly "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_neoforge_modrinth_version}"
     modRuntimeOnly "maven.modrinth:forge-config-api-port:${rootProject.forgeconfigapiport_neoforge_modrinth_version}"
+    if (providers.gradleProperty("withShipAddons").orElse("false").get().toBoolean()) {
+        modRuntimeOnly "curse.maven:small-ships-addon-1733494:9213008"
+        modRuntimeOnly "curse.maven:small-ships-viking-addon-1733216:9205132"
+    }
 
     common(project(path: ":common", configuration: "namedElements")) { transitive = false }
     shadowCommon(project(path: ":common", configuration: "transformProductionNeoForge")) { transitive = false }

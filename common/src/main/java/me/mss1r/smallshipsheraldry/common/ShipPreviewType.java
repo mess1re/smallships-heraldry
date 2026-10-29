@@ -1,14 +1,13 @@
 package me.mss1r.smallshipsheraldry.common;
 
-import com.talhanation.smallships.world.entity.ship.BriggEntity;
-import com.talhanation.smallships.world.entity.ship.CaravelEntity;
-import com.talhanation.smallships.world.entity.ship.CogEntity;
-import com.talhanation.smallships.world.entity.ship.DhowEntity;
-import com.talhanation.smallships.world.entity.ship.DrakkarEntity;
-import com.talhanation.smallships.world.entity.ship.GalleonEntity;
-import com.talhanation.smallships.world.entity.ship.GalleyEntity;
+import com.talhanation.smallships.api.ShipRegistry;
 import com.talhanation.smallships.world.entity.ship.Ship;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.Arrays;
+import java.util.function.Predicate;
 
 public enum ShipPreviewType {
     COG("cog"),
@@ -17,16 +16,33 @@ public enum ShipPreviewType {
     DRAKKAR("drakkar"),
     CARAVEL("caravel"),
     DHOW("dhow"),
-    GALLEON("galleon");
+    GALLEON("galleon"),
+    FISHING_BOAT("smallships_addon", "fishing_boat"),
+    EARLY_COG("smallships_addon", "early_cog"),
+    EARLY_CARAVEL("smallships_addon", "early_caravel"),
+    KNARR("smallships_viking_addon", "knarr"),
+    LONGSHIP("smallships_viking_addon", "longship"),
+    TRANSPORT_DRAKKAR("smallships_viking_addon", "transport_drakkar");
 
+    private static final ShipPreviewType[] TYPES = values();
     private final String serializedName;
+    private final ResourceLocation registryId;
 
     ShipPreviewType(String serializedName) {
+        this("smallships", serializedName);
+    }
+
+    ShipPreviewType(String namespace, String serializedName) {
         this.serializedName = serializedName;
+        this.registryId = ResourceLocation.fromNamespaceAndPath(namespace, serializedName);
     }
 
     public String serializedName() {
         return serializedName;
+    }
+
+    public ResourceLocation registryId() {
+        return registryId;
     }
 
     public Component getDisplayName() {
@@ -34,29 +50,35 @@ public enum ShipPreviewType {
     }
 
     public boolean matches(Ship ship) {
-        return switch (this) {
-            case COG -> ship instanceof CogEntity;
-            case BRIGG -> ship instanceof BriggEntity;
-            case GALLEY -> ship instanceof GalleyEntity;
-            case DRAKKAR -> ship instanceof DrakkarEntity;
-            case CARAVEL -> ship instanceof CaravelEntity;
-            case DHOW -> ship instanceof DhowEntity;
-            case GALLEON -> ship instanceof GalleonEntity;
-        };
+        return ship != null && registryId.equals(BuiltInRegistries.ENTITY_TYPE.getKey(ship.getType()));
+    }
+
+    public boolean isAvailable() {
+        return ShipRegistry.get(registryId) != null;
+    }
+
+    public static ShipPreviewType[] availableTypes() {
+        return Arrays.stream(TYPES).filter(ShipPreviewType::isAvailable).toArray(ShipPreviewType[]::new);
     }
 
     public ShipPreviewType next() {
-        ShipPreviewType[] values = values();
-        return values[(ordinal() + 1) % values.length];
+        return cycle(1, ShipPreviewType::isAvailable);
     }
 
     public ShipPreviewType previous() {
-        ShipPreviewType[] values = values();
-        return values[(ordinal() + values.length - 1) % values.length];
+        return cycle(-1, ShipPreviewType::isAvailable);
+    }
+
+    ShipPreviewType cycle(int direction, Predicate<ShipPreviewType> available) {
+        for (int offset = 1; offset <= TYPES.length; offset++) {
+            ShipPreviewType candidate = TYPES[Math.floorMod(ordinal() + direction * offset, TYPES.length)];
+            if (available.test(candidate)) return candidate;
+        }
+        return COG;
     }
 
     public static ShipPreviewType byName(String serializedName) {
-        for (ShipPreviewType previewType : values()) {
+        for (ShipPreviewType previewType : TYPES) {
             if (previewType.serializedName.equals(serializedName)) {
                 return previewType;
             }
@@ -65,23 +87,10 @@ public enum ShipPreviewType {
     }
 
     public static ShipPreviewType fromShip(Ship ship) {
-        if (ship instanceof BriggEntity) {
-            return BRIGG;
-        }
-        if (ship instanceof GalleyEntity) {
-            return GALLEY;
-        }
-        if (ship instanceof DrakkarEntity) {
-            return DRAKKAR;
-        }
-        if (ship instanceof CaravelEntity) {
-            return CARAVEL;
-        }
-        if (ship instanceof DhowEntity) {
-            return DHOW;
-        }
-        if (ship instanceof GalleonEntity) {
-            return GALLEON;
+        for (ShipPreviewType type : TYPES) {
+            if (type.matches(ship)) {
+                return type;
+            }
         }
         return COG;
     }

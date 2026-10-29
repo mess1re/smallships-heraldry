@@ -135,5 +135,12 @@
   "advancements.smallshipsheraldry.prepare_heraldry.title": "Sailmaker's Workshop",
   "advancements.smallshipsheraldry.prepare_heraldry.description": "Craft a Heraldry Table",
   "advancements.smallshipsheraldry.print_pattern.title": "Make Your Mark",
-  "advancements.smallshipsheraldry.print_pattern.description": "Print a custom sail pattern"
+  "advancements.smallshipsheraldry.print_pattern.description": "Print a custom sail pattern",
+  "smallshipsheraldry.preview.fishing_boat": "Fishing Boat",
+  "smallshipsheraldry.preview.early_cog": "Early Cog",
+  "smallshipsheraldry.preview.early_caravel": "Early Caravel",
+  "smallshipsheraldry.preview.knarr": "Knarr",
+  "smallshipsheraldry.preview.longship": "Longship",
+  "smallshipsheraldry.preview.transport_drakkar": "Transport Drakkar",
+  "smallshipsheraldry.message.ship_unavailable": "This ship's addon is not installed."
 }

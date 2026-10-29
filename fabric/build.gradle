@@ -23,6 +23,10 @@ dependencies {
     modRuntimeOnly "maven.modrinth:forge-config-api-port:${rootProject.forgeconfigapiport_fabric_modrinth_version}"
     runtimeOnly "com.electronwill.night-config:core:3.8.0"
     runtimeOnly "com.electronwill.night-config:toml:3.8.0"
+    if (providers.gradleProperty("withShipAddons").orElse("false").get().toBoolean()) {
+        modRuntimeOnly "curse.maven:small-ships-addon-1733494:9212967"
+        modRuntimeOnly "curse.maven:small-ships-viking-addon-1733216:9205140"
+    }
 
     common(project(path: ":common", configuration: "namedElements")) { transitive = false }
     shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive = false }

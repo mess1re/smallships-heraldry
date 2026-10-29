@@ -17,13 +17,13 @@ public abstract class ShipRendererMixin<T extends Ship> {
     @Inject(method = "renderSail", at = @At("HEAD"), cancellable = true)
     private void smallshipsheraldry$suppressEditorSails(Sailable sailable, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight, CallbackInfo ci) {
         if (PaintableSailMesh.editorEntitySailsSuppressed()) {
-            SailBannerOverlayRenderer.renderEditorPreview(sailable, partialTicks, poseStack, multiBufferSource, packedLight);
+            SailBannerOverlayRenderer.renderEditorPreview(sailable, poseStack, multiBufferSource, packedLight);
             ci.cancel();
         }
     }
 
     @Inject(method = "renderSail", at = @At("TAIL"))
     private void smallshipsheraldry$renderHeraldryPaintLayer(Sailable sailable, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight, CallbackInfo ci) {
-        SailBannerOverlayRenderer.renderOverlay(sailable, partialTicks, poseStack, multiBufferSource, packedLight);
+        SailBannerOverlayRenderer.renderOverlay(sailable, poseStack, multiBufferSource, packedLight);
     }
 }

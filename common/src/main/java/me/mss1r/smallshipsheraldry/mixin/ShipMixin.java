@@ -26,12 +26,24 @@ public abstract class ShipMixin implements SailBannerAccess {
     private String smallshipsheraldry$originalSailColor = "";
 
     @Unique
+    private boolean smallshipsheraldry$applyingPatternColor;
+
+    @Unique
     private static final EntityDataAccessor<ItemStack> SMALLSHIPSHERALDRY$SAIL_BANNER =
             SynchedEntityData.defineId(Ship.class, EntityDataSerializers.ITEM_STACK);
 
     @Inject(method = "defineSynchedData", at = @At("RETURN"))
     private void smallshipsheraldry$defineSynchedData(SynchedEntityData.Builder builder, CallbackInfo ci) {
         builder.define(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
+    }
+
+    @Inject(method = "setData", at = @At("HEAD"))
+    private <T> void smallshipsheraldry$trackSailRecolor(EntityDataAccessor<T> accessor, T value, CallbackInfo ci) {
+        if (accessor == Ship.SAIL_COLOR && !smallshipsheraldry$applyingPatternColor
+                && !((Entity) (Object) this).level().isClientSide()
+                && smallshipsheraldry$hasSailBanner() && value instanceof String color) {
+            smallshipsheraldry$originalSailColor = color;
+        }
     }
 
     @Inject(method = "readAdditionalSaveData", at = @At("RETURN"))
@@ -81,5 +93,16 @@ public abstract class ShipMixin implements SailBannerAccess {
     @Override
     public void smallshipsheraldry$setOriginalSailColor(String color) {
         smallshipsheraldry$originalSailColor = color == null ? "" : color;
+    }
+
+    @Override
+    public void smallshipsheraldry$applyPatternSailColor(String color) {
+        boolean previous = smallshipsheraldry$applyingPatternColor;
+        smallshipsheraldry$applyingPatternColor = true;
+        try {
+            ((Ship) (Object) this).setData(Ship.SAIL_COLOR, color);
+        } finally {
+            smallshipsheraldry$applyingPatternColor = previous;
+        }
     }
 }

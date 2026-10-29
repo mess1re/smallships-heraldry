@@ -1,5 +1,6 @@
 package me.mss1r.smallshipsheraldry.client.render;
 
+import com.talhanation.smallships.api.client.ShipRenderRegistry;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import net.minecraft.client.model.EntityModel;
@@ -8,6 +9,10 @@ import net.minecraft.resources.ResourceLocation;
 
 final class SailModelBridge {
     private SailModelBridge() {
+    }
+
+    static SailModel model(Ship ship) {
+        return ship == null ? null : ShipRenderRegistry.getSail(ship.getClass());
     }
 
     static void setupAnim(SailModel sailModel, Ship ship, float limbSwing) {

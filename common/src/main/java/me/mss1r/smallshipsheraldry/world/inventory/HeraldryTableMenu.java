@@ -149,7 +149,8 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
         }
 
         HeraldryTableDrafts drafts = blockEntity.getDrafts();
-        ShipPreviewType[] shipTypes = ShipPreviewType.values();
+        ShipPreviewType[] shipTypes = ShipPreviewType.availableTypes();
+        ShipPreviewType activeType = drafts.activeShipType().isAvailable() ? drafts.activeShipType() : ShipPreviewType.COG;
         for (int index = 0; index < shipTypes.length; index++) {
             ShipPreviewType shipType = shipTypes[index];
             byte[] encoded;
@@ -160,7 +161,7 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
             }
             NetworkManager.sendToPlayer(serverPlayer, new TableDraftSyncPayload(
                     blockPos,
-                    drafts.activeShipType().serializedName(),
+                    activeType.serializedName(),
                     shipType.serializedName(),
                     index == 0,
                     index == shipTypes.length - 1,

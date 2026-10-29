@@ -2,13 +2,6 @@ package me.mss1r.smallshipsheraldry.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.talhanation.smallships.client.model.sail.BriggSailModel;
-import com.talhanation.smallships.client.model.sail.CaravelSailModel;
-import com.talhanation.smallships.client.model.sail.CogSailModel;
-import com.talhanation.smallships.client.model.sail.DhowSailModel;
-import com.talhanation.smallships.client.model.sail.DrakkarSailModel;
-import com.talhanation.smallships.client.model.sail.GalleonSailModel;
-import com.talhanation.smallships.client.model.sail.GalleySailModel;
 import com.talhanation.smallships.client.model.sail.SailModel;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import me.mss1r.smallshipsheraldry.SmallShipsHeraldry;
@@ -28,18 +21,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Supplier;
 
 final class SailMeshDefinitionBuilder {
-    private static final Map<ShipPreviewType, Supplier<SailModel>> MODEL_FACTORIES = Map.of(
-            ShipPreviewType.COG, CogSailModel::new,
-            ShipPreviewType.BRIGG, BriggSailModel::new,
-            ShipPreviewType.GALLEY, GalleySailModel::new,
-            ShipPreviewType.DRAKKAR, DrakkarSailModel::new,
-            ShipPreviewType.CARAVEL, CaravelSailModel::new,
-            ShipPreviewType.DHOW, DhowSailModel::new,
-            ShipPreviewType.GALLEON, GalleonSailModel::new
-    );
     private static final Map<ShipPreviewType, Definition> DEFINITIONS = new HashMap<>();
     private static final Field MODEL_PART_CUBES = findModelPartField(List.class);
     private static final Field MODEL_PART_CHILDREN = findModelPartField(Map.class);
@@ -49,12 +32,15 @@ final class SailMeshDefinitionBuilder {
     }
 
     static Definition definition(ShipPreviewType shipType) {
-        return DEFINITIONS.computeIfAbsent(shipType, SailMeshDefinitionBuilder::buildDefinition);
-    }
-
-    static SailModel createModel(ShipPreviewType shipType) {
-        Supplier<SailModel> factory = MODEL_FACTORIES.get(shipType);
-        return factory == null ? null : factory.get();
+        Definition cached = DEFINITIONS.get(shipType);
+        if (cached != null) {
+            return cached;
+        }
+        Definition built = buildDefinition(shipType);
+        if (!built.isEmpty()) {
+            DEFINITIONS.put(shipType, built);
+        }
+        return built;
     }
 
     static List<PaintableSailMesh.Face> collectFaces(
@@ -75,24 +61,25 @@ final class SailMeshDefinitionBuilder {
 
     private static Definition buildDefinition(ShipPreviewType shipType) {
         Ship previewShip = PreviewShipFactory.create(shipType, HeraldryPatternData.blank().withShipType(shipType));
-        SailModel sailModel = createModel(shipType);
+        SailModel sailModel = SailModelBridge.model(previewShip);
         if (previewShip == null || sailModel == null) {
             return Definition.empty();
         }
 
         TreeMap<String, TileSize> faceTiles = new TreeMap<>();
-        Map<String, PaintableSailMesh.Element> elements = new LinkedHashMap<>();
         Map<Integer, Map<String, PaintableSailMesh.Element>> elementsByState = new HashMap<>();
+        Map<Integer, List<RawFace>> rawFacesByState = new HashMap<>();
         for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
             previewShip.setData(Ship.SAIL_STATE, (byte) state);
             SailModelBridge.setupAnim(sailModel, previewShip, 1.0F);
-            for (RawFace rawFace : collectRawFaces(sailModel, new PoseStack(), state)) {
+            List<RawFace> rawFaces = collectRawFaces(sailModel, new PoseStack(), state);
+            rawFacesByState.put(state, rawFaces);
+            for (RawFace rawFace : rawFaces) {
                 if (!isPaintableFace(rawFace)) {
                     continue;
                 }
                 faceTiles.put(rawFace.key(), tileSize(rawFace));
                 PaintableSailMesh.Element element = new PaintableSailMesh.Element(rawFace.elementId(), readableName(rawFace.elementId()));
-                elements.putIfAbsent(rawFace.elementId(), element);
                 elementsByState.computeIfAbsent(state, ignored -> new LinkedHashMap<>())
                         .putIfAbsent(rawFace.elementId(), element);
             }
@@ -101,10 +88,8 @@ final class SailMeshDefinitionBuilder {
         Map<String, PaintableSailMesh.AtlasSlot> faceSlots = packAtlasSlots(faceTiles, shipType);
         Map<Integer, List<PaintableSailMesh.Face>> facesByState = new HashMap<>();
         for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
-            previewShip.setData(Ship.SAIL_STATE, (byte) state);
-            SailModelBridge.setupAnim(sailModel, previewShip, 1.0F);
             List<PaintableSailMesh.Face> stateFaces = new ArrayList<>();
-            for (RawFace rawFace : collectRawFaces(sailModel, new PoseStack(), state)) {
+            for (RawFace rawFace : rawFacesByState.get(state)) {
                 PaintableSailMesh.AtlasSlot slot = faceSlots.get(rawFace.key());
                 if (slot != null && isPaintableFace(rawFace)) {
                     stateFaces.add(rawFace.toFace(slot));
@@ -117,7 +102,7 @@ final class SailMeshDefinitionBuilder {
         for (Map.Entry<Integer, Map<String, PaintableSailMesh.Element>> entry : elementsByState.entrySet()) {
             immutableElementsByState.put(entry.getKey(), List.copyOf(entry.getValue().values()));
         }
-        return new Definition(faceSlots, List.copyOf(elements.values()), Map.copyOf(immutableElementsByState), Map.copyOf(facesByState));
+        return new Definition(faceSlots, Map.copyOf(immutableElementsByState), Map.copyOf(facesByState));
     }
 
     private static Map<String, PaintableSailMesh.AtlasSlot> packAtlasSlots(
@@ -429,12 +414,11 @@ final class SailMeshDefinitionBuilder {
 
     record Definition(
             Map<String, PaintableSailMesh.AtlasSlot> faceSlotsByKey,
-            List<PaintableSailMesh.Element> elements,
             Map<Integer, List<PaintableSailMesh.Element>> elementsByState,
             Map<Integer, List<PaintableSailMesh.Face>> facesByState
     ) {
         private static Definition empty() {
-            return new Definition(Map.of(), List.of(), Map.of(), Map.of());
+            return new Definition(Map.of(), Map.of(), Map.of());
         }
 
         boolean isEmpty() {
@@ -446,7 +430,7 @@ final class SailMeshDefinitionBuilder {
         }
 
         List<PaintableSailMesh.Element> elementsForState(int state) {
-            return elementsByState.getOrDefault(state, elements);
+            return elementsByState.getOrDefault(state, List.of());
         }
 
         List<PaintableSailMesh.Face> facesForState(int state) {

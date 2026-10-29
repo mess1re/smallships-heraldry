@@ -14,10 +14,20 @@ import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeraldryPatternDataTest {
+    @Test
+    void renderCacheHashTracksShipColourAndPixelsButNotTheAuthor() {
+        HeraldryPatternData pattern = HeraldryPatternData.fromMeshPixels("first", ShipPreviewType.COG, 0xFFFFFFFF, new int[]{0xFF112233});
+        assertEquals(pattern.visualHash(), pattern.withAuthor("second").visualHash());
+        assertNotEquals(pattern.visualHash(), pattern.withShipType(ShipPreviewType.BRIGG).visualHash());
+        assertNotEquals(pattern.visualHash(), pattern.withBaseColor(0xFF445566).visualHash());
+        assertNotEquals(pattern.visualHash(), HeraldryPatternData.fromMeshPixels("first", ShipPreviewType.COG, 0xFFFFFFFF, new int[]{0xFF778899}).visualHash());
+    }
+
     @Test
     void blankPatternStaysSmall() {
         HeraldryPatternData blank = HeraldryPatternData.blank();

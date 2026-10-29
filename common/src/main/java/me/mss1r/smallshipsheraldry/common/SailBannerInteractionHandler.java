@@ -18,7 +18,7 @@ public final class SailBannerInteractionHandler {
     }
 
     public static InteractionResult tryHandle(Ship ship, Player player, InteractionHand interactionHand) {
-        if (ship.isLocked() || !player.isSecondaryUseActive()) {
+        if (ship.isLocked() || ship.isInDockyardWork() || !player.isSecondaryUseActive()) {
             return InteractionResult.PASS;
         }
 
@@ -48,14 +48,12 @@ public final class SailBannerInteractionHandler {
             }
 
             if (!clientSide) {
-                if (!access.smallshipsheraldry$hasSailBanner()) {
-                    access.smallshipsheraldry$setOriginalSailColor(ship.getData(Ship.SAIL_COLOR));
-                }
+                access.smallshipsheraldry$setOriginalSailColor(colorWithoutPattern(ship, access));
 
                 ItemStack sailPattern = heldItem.copy();
                 sailPattern.setCount(1);
                 access.smallshipsheraldry$setSailBanner(sailPattern);
-                ship.setData(Ship.SAIL_COLOR, HeraldryColorUtil.nearestDyeName(patternData.baseColorArgb()));
+                access.smallshipsheraldry$applyPatternSailColor(HeraldryColorUtil.nearestDyeName(patternData.baseColorArgb()));
 
                 if (!player.isCreative()) {
                     heldItem.shrink(1);
@@ -71,10 +69,9 @@ public final class SailBannerInteractionHandler {
 
         if (heldItem.getItem() instanceof ShearsItem && access.smallshipsheraldry$hasSailBanner()) {
             if (!clientSide) {
+                String restoredColor = colorWithoutPattern(ship, access);
                 access.smallshipsheraldry$setSailBanner(ItemStack.EMPTY);
-                if (access.smallshipsheraldry$hasOriginalSailColor()) {
-                    ship.setData(Ship.SAIL_COLOR, access.smallshipsheraldry$getOriginalSailColor());
-                }
+                ship.setData(Ship.SAIL_COLOR, restoredColor);
                 access.smallshipsheraldry$setOriginalSailColor("");
                 if (!player.isCreative()) {
                     heldItem.hurtAndBreak(
@@ -90,6 +87,17 @@ public final class SailBannerInteractionHandler {
         }
 
         return InteractionResult.PASS;
+    }
+
+    private static String colorWithoutPattern(Ship ship, SailBannerAccess access) {
+        String currentColor = ship.getData(Ship.SAIL_COLOR);
+        HeraldryPatternData installed = HeraldryPatternData.tryFromStack(access.smallshipsheraldry$getSailBanner()).orElse(null);
+        // Recover external recolors made before they were tracked in saved ship data.
+        if (installed == null || !access.smallshipsheraldry$hasOriginalSailColor()
+                || !currentColor.equals(HeraldryColorUtil.nearestDyeName(installed.baseColorArgb()))) {
+            return currentColor;
+        }
+        return access.smallshipsheraldry$getOriginalSailColor();
     }
 
     private static void giveOrDrop(Player player, ItemStack stack) {

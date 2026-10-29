@@ -23,8 +23,8 @@ public record TableDraftSyncPayload(
 
     private void write(RegistryFriendlyByteBuf buffer) {
         buffer.writeBlockPos(blockPos);
-        buffer.writeUtf(activeShipType, 16);
-        buffer.writeUtf(draftShipType, 16);
+        buffer.writeUtf(activeShipType, 64);
+        buffer.writeUtf(draftShipType, 64);
         buffer.writeBoolean(first);
         buffer.writeBoolean(last);
         buffer.writeByteArray(encodedPattern);
@@ -33,8 +33,8 @@ public record TableDraftSyncPayload(
     private static TableDraftSyncPayload read(RegistryFriendlyByteBuf buffer) {
         return new TableDraftSyncPayload(
                 buffer.readBlockPos(),
-                buffer.readUtf(16),
-                buffer.readUtf(16),
+                buffer.readUtf(64),
+                buffer.readUtf(64),
                 buffer.readBoolean(),
                 buffer.readBoolean(),
                 buffer.readByteArray(HeraldryPatternTransfer.MAX_COMPRESSED_BYTES)
