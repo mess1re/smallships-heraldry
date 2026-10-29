@@ -426,7 +426,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             refresh(name);
             showMessage("smallshipsheraldry.library.saved");
         } else {
-            showResult(result);
+            showResult(result, "save_failed");
         }
     }
 
@@ -465,7 +465,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             refresh(name);
             showMessage("smallshipsheraldry.library.renamed");
         } else {
-            showResult(result);
+            showResult(result, "rename_failed");
         }
     }
 
@@ -484,7 +484,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             refresh(null);
             showMessage("smallshipsheraldry.library.deleted");
         } else {
-            showResult(result);
+            showResult(result, "delete_failed");
         }
     }
 
@@ -505,7 +505,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             Files.createDirectories(directory);
             Util.getPlatform().openFile(directory.toFile());
         } catch (RuntimeException | java.io.IOException exception) {
-            showMessage("smallshipsheraldry.library.io_error");
+            showMessage("smallshipsheraldry.library.folder_failed");
         }
     }
 
@@ -530,13 +530,13 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         confirmUntil = 0L;
     }
 
-    private void showResult(HeraldryPatternLibrary.Result result) {
+    private void showResult(HeraldryPatternLibrary.Result result, String failureKey) {
         String key = switch (result) {
             case INVALID_NAME -> "smallshipsheraldry.library.invalid_name";
             case ALREADY_EXISTS -> "smallshipsheraldry.library.exists";
             case TOO_LARGE -> "smallshipsheraldry.library.too_large";
             case NOT_FOUND -> "smallshipsheraldry.library.not_found";
-            default -> "smallshipsheraldry.library.io_error";
+            default -> "smallshipsheraldry.library." + failureKey;
         };
         showMessage(key);
     }
