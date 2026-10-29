@@ -21,20 +21,14 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.Level;
 
 public class HeraldryTableMenu extends AbstractContainerMenu {
-    public static final int PAPER_SLOT_X = 382;
-    public static final int PAPER_SLOT_Y = 206;
-    public static final int RESULT_SLOT_X = 440;
-    public static final int RESULT_SLOT_Y = 206;
     public static final int SLOT_ACTION_INSERT = 0;
     public static final int SLOT_ACTION_EXTRACT = 1;
     public static final int SLOT_ACTION_INSERT_ALL = 2;
     public static final int SLOT_ACTION_EXTRACT_ONE = 3;
 
     private final HeraldryTableBlockEntity blockEntity;
-    private final Level level;
     private final BlockPos blockPos;
     private final HeraldryTableDrafts initialDrafts;
     private final HeraldryPatternTransfer.Collector draftCollector = new HeraldryPatternTransfer.Collector();
@@ -47,23 +41,29 @@ public class HeraldryTableMenu extends AbstractContainerMenu {
     public HeraldryTableMenu(int containerId, Inventory inventory, HeraldryTableBlockEntity blockEntity, HeraldryTableDrafts initialDrafts) {
         super(HeraldryMenus.HERALDRY_TABLE.get(), containerId);
         this.blockEntity = blockEntity;
-        this.level = inventory.player.level();
         this.blockPos = blockEntity.getBlockPos();
         this.initialDrafts = initialDrafts == null ? HeraldryTableDrafts.blank() : initialDrafts;
 
-        addSlot(new Slot(blockEntity, HeraldryTableBlockEntity.PAPER_SLOT, PAPER_SLOT_X, PAPER_SLOT_Y) {
+        // The responsive screen owns slot positions and hit testing.
+        addSlot(new Slot(blockEntity, HeraldryTableBlockEntity.PAPER_SLOT, 0, 0) {
             @Override
             public boolean mayPlace(ItemStack stack) {
                 return stack.is(Items.PAPER);
             }
         });
 
-        addSlot(new Slot(blockEntity, HeraldryTableBlockEntity.RESULT_SLOT, RESULT_SLOT_X, RESULT_SLOT_Y) {
+        addSlot(new Slot(blockEntity, HeraldryTableBlockEntity.RESULT_SLOT, 0, 0) {
             @Override
             public boolean mayPlace(ItemStack stack) {
                 return false;
             }
         });
+
+        // These slots synchronize inventory changes; the editor draws only the two table slots.
+        for (int index = 0; index < inventory.items.size(); index++) {
+            addSlot(new Slot(inventory, index, 0, 0));
+        }
+        addSlot(new Slot(inventory, Inventory.SLOT_OFFHAND, 0, 0));
     }
 
     public static HeraldryTableMenu fromNetwork(int containerId, Inventory inventory, FriendlyByteBuf buf) {

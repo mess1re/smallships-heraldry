@@ -9,6 +9,7 @@
     "ShipMixin"
   ],
   "client": [
+    "client.EditBoxMixin",
     "client.SailBannerModelMixin",
     "client.ShipRendererMixin"
   ],

@@ -118,8 +118,16 @@ final class HeraldryEditorSession {
         return savePending && now >= saveAt;
     }
 
+    boolean hasPendingSave() {
+        return savePending;
+    }
+
     void markSaved() {
         savePending = false;
+    }
+
+    void deferSaveRetry() {
+        saveAt = System.currentTimeMillis() + SAVE_DELAY_MILLIS;
     }
 
     HeraldryPatternData pattern() {

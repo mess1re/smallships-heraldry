@@ -36,6 +36,11 @@ public class HeraldryPatternPreviewScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        if (previewShip == null) {
+            guiGraphics.drawCenteredString(font, Component.translatable("smallshipsheraldry.message.ship_unavailable"),
+                    width / 2, height / 2, 0xFFFFFFFF);
+            return;
+        }
         PreviewShipRenderer.render(
                 guiGraphics,
                 0,

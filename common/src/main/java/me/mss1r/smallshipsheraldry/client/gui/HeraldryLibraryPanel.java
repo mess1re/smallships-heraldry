@@ -23,10 +23,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
 
+import static me.mss1r.smallshipsheraldry.client.gui.HeraldryEditorLayout.isInside;
+
 final class HeraldryLibraryPanel implements AutoCloseable {
     private static final DateTimeFormatter NAME_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm");
-    private static final int X = 32;
-    private static final int Y = 24;
+    private static final int X = -3;
+    private static final int Y = 64;
     private static final int WIDTH = 406;
     private static final int HEIGHT = 212;
     private static final int LIST_X = 12;
@@ -43,7 +45,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     private final Font font;
     private final Controller controller;
     private List<HeraldryPatternLibrary.Entry> entries = List.of();
-    private PaperEditBox nameInput;
+    private HeraldryEditBox nameInput;
     private int selection = -1;
     private int scroll;
     private int leftPos;
@@ -70,14 +72,14 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         this.controller = controller;
     }
 
-    void init(int leftPos, int topPos) {
-        this.leftPos = leftPos;
-        this.topPos = topPos;
+    void init(int editorLeft, int editorTop, int editorWidth, int editorHeight) {
+        this.leftPos = editorLeft + (editorWidth - WIDTH) / 2 - X;
+        this.topPos = editorTop + (editorHeight - HEIGHT) / 2 - Y;
         rotatingPreview = false;
         panningPreview = false;
         String previousName = nameInput == null ? null : nameInput.getValue();
         boolean wasFocused = nameInput != null && nameInput.isFocused();
-        nameInput = new PaperEditBox(font, leftPos + X + 13, topPos + Y + 24, 148, 14,
+        nameInput = new HeraldryEditBox(font, leftPos + X + 13, topPos + Y + 24, 148, 14,
                 Component.translatable("smallshipsheraldry.library.name"));
         nameInput.setMaxLength(HeraldryPatternLibrary.MAX_NAME_LENGTH);
         nameInput.setBordered(false);
@@ -111,12 +113,6 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         }
         closePreview();
         clearConfirmation();
-    }
-
-    void tick() {
-        if (visible && nameInput != null) {
-            nameInput.tick();
-        }
     }
 
     void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -160,7 +156,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         if (nameInput != null) {
             nameInput.setFocused(false);
         }
-        if (isInside(mouseX, mouseY, x + 166, y + 22, 54, 17)) {
+        if (isInside(mouseX, mouseY, x + 166, y + 22, 60, 17)) {
             save();
             return true;
         }
@@ -249,22 +245,21 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         HeraldryGuiTheme.drawWindow(graphics, x, y, WIDTH, HEIGHT);
         graphics.drawString(font, Component.translatable("smallshipsheraldry.library.title"), x + 12, y + 10, HeraldryGuiTheme.INK, false);
 
-        graphics.fill(x + 11, y + 22, x + 163, y + 39,
-                nameInput != null && nameInput.isFocused() ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.FRAME_DARK);
-        graphics.fill(x + 12, y + 23, x + 162, y + 38, HeraldryGuiTheme.PAPER_ALT);
+        HeraldryGuiTheme.drawField(graphics, x + 11, y + 22, 152, 17,
+                nameInput != null && nameInput.isFocused());
         if (nameInput != null) {
             nameInput.render(graphics, mouseX, mouseY, partialTick);
         }
-        drawControl(graphics, mouseX, mouseY, x + 166, y + 22, 54, 17,
+        drawControl(graphics, mouseX, mouseY, x + 166, y + 22, 60, 17,
                 Component.translatable("smallshipsheraldry.library.save"));
 
         Component currentMessage = System.currentTimeMillis() < messageUntil
                 ? message
                 : Component.translatable("smallshipsheraldry.library.local_hint");
         if (currentMessage != null) {
-            List<FormattedCharSequence> lines = font.split(currentMessage, 170);
+            List<FormattedCharSequence> lines = font.split(currentMessage, 160);
             for (int index = 0; index < Math.min(2, lines.size()); index++) {
-                graphics.drawString(font, lines.get(index), x + 226, y + 22 + index * 9, HeraldryGuiTheme.MUTED_INK, false);
+                graphics.drawString(font, lines.get(index), x + 234, y + 22 + index * 9, HeraldryGuiTheme.MUTED_INK, false);
             }
         }
 
@@ -280,7 +275,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
     private void drawEntries(GuiGraphics graphics, int mouseX, int mouseY, int x, int y) {
         int listX = x + LIST_X;
         int listY = y + LIST_Y;
-        HeraldryGuiTheme.drawPanel(graphics, listX - 2, listY - 2, LIST_WIDTH + 4, VISIBLE_ROWS * ROW_HEIGHT + 4);
+        HeraldryGuiTheme.drawInset(graphics, listX - 2, listY - 2, LIST_WIDTH + 4, VISIBLE_ROWS * ROW_HEIGHT + 4);
         if (entries.isEmpty()) {
             drawCentered(graphics, Component.translatable("smallshipsheraldry.library.empty"), listX + LIST_WIDTH / 2, listY + 52);
             return;
@@ -289,14 +284,13 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             int index = scroll + row;
             int rowY = listY + row * ROW_HEIGHT;
             if (index >= entries.size()) {
-                graphics.fill(listX, rowY, listX + LIST_WIDTH, rowY + 11, HeraldryGuiTheme.PAPER_ALT);
+                HeraldryGuiTheme.drawRow(graphics, listX, rowY, LIST_WIDTH, 11, false, false);
                 continue;
             }
             HeraldryPatternLibrary.Entry entry = entries.get(index);
             boolean selected = index == selection;
             boolean hovered = isInside(mouseX, mouseY, listX, rowY, LIST_WIDTH, 11);
-            graphics.fill(listX, rowY, listX + LIST_WIDTH, rowY + 11,
-                    selected ? HeraldryGuiTheme.GOLD : hovered ? HeraldryGuiTheme.INSET : HeraldryGuiTheme.PAPER_ALT);
+            HeraldryGuiTheme.drawRow(graphics, listX, rowY, LIST_WIDTH, 11, selected, hovered);
             graphics.drawString(font, font.plainSubstrByWidth(entry.name(), LIST_WIDTH - 8), listX + 4, rowY + 2, HeraldryGuiTheme.INK, false);
         }
     }
@@ -373,6 +367,11 @@ final class HeraldryLibraryPanel implements AutoCloseable {
             showMessage("smallshipsheraldry.message.invalid_pattern");
             return;
         }
+        previewData = data;
+        if (!data.shipType().isAvailable()) {
+            showMessage("smallshipsheraldry.message.ship_unavailable");
+            return;
+        }
         try {
             previewTexture = new HeraldryDraftTexture("library", data.toDenseMeshPixels());
             previewData = data;
@@ -439,6 +438,10 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         HeraldryPatternData imported = previewData;
         if (imported == null) {
             showMessage("smallshipsheraldry.message.invalid_pattern");
+            return;
+        }
+        if (!imported.shipType().isAvailable()) {
+            showMessage("smallshipsheraldry.message.ship_unavailable");
             return;
         }
         if (controller.hasDraftWork(imported.shipType())
@@ -555,18 +558,11 @@ final class HeraldryLibraryPanel implements AutoCloseable {
 
     private void drawControl(GuiGraphics graphics, int mouseX, int mouseY, int x, int y, int width, int height, Component text) {
         boolean hovered = isInside(mouseX, mouseY, x, y, width, height);
-        graphics.fill(x, y, x + width, y + height, hovered ? HeraldryGuiTheme.GOLD_LIGHT : HeraldryGuiTheme.FRAME_DARK);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, hovered ? HeraldryGuiTheme.GOLD : HeraldryGuiTheme.PAPER_ALT);
-        Component clipped = Component.literal(font.plainSubstrByWidth(text.getString(), Math.max(1, width - 4)));
-        graphics.drawString(font, clipped, x + (width - font.width(clipped)) / 2, y + (height - 8) / 2, HeraldryGuiTheme.INK, false);
+        HeraldryGuiTheme.drawButton(graphics, font, x, y, width, height, false, hovered, true, text, 2);
     }
 
     private void drawCentered(GuiGraphics graphics, Component text, int centerX, int y) {
         graphics.drawString(font, text, centerX - font.width(text) / 2, y, HeraldryGuiTheme.MUTED_INK, false);
-    }
-
-    private static boolean isInside(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
     interface Controller {
