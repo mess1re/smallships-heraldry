@@ -1024,7 +1024,8 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
         String[] paragraphs = {
                 "section.modes", "layout", "paint", "parts", "view", "navigation",
                 "section.controls", "controls", "selection",
-                "section.patterns", "library", "workflow", "apply"
+                "section.patterns", "library", "workflow", "duplicate",
+                "section.ship", "apply", "remove"
         };
         List<HelpLine> lines = new java.util.ArrayList<>();
         for (String paragraph : paragraphs) {
