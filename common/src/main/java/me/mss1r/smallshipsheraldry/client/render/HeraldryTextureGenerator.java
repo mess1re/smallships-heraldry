@@ -13,6 +13,12 @@ public final class HeraldryTextureGenerator {
 
     public static NativeImage buildComposedTexture(HeraldryPatternData data) {
         NativeImage image = new NativeImage(ATLAS_WIDTH, ATLAS_HEIGHT, true);
+        paintInto(image, data);
+        return image;
+    }
+
+    static void paintInto(NativeImage image, HeraldryPatternData data) {
+        image.fillRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT, 0);
         data.forEachRun((start, length, argb) -> {
             int abgr = argbToAbgr(argb);
             int end = start + length;
@@ -20,7 +26,6 @@ public final class HeraldryTextureGenerator {
                 image.setPixelRGBA(index % ATLAS_WIDTH, index / ATLAS_WIDTH, abgr);
             }
         });
-        return image;
     }
 
     public static int argbToAbgr(int argb) {

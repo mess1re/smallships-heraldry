@@ -135,15 +135,21 @@ final class SailMeshPicker {
 
     static final class Index {
         private final List<PaintableSailMesh.Face> faces;
+        private final Map<Integer, PaintableSailMesh.Face> facesByIndex = new HashMap<>();
         private final Map<Long, List<PaintableSailMesh.Face>> cells;
 
         private Index(List<PaintableSailMesh.Face> faces, Map<Long, List<PaintableSailMesh.Face>> cells) {
             this.faces = faces;
             this.cells = cells;
+            for (PaintableSailMesh.Face face : faces) facesByIndex.put(face.faceIndex(), face);
         }
 
         List<PaintableSailMesh.Face> faces() {
             return faces;
+        }
+
+        Optional<PaintableSailMesh.Face> face(int faceIndex) {
+            return Optional.ofNullable(facesByIndex.get(faceIndex));
         }
 
         int candidateCountAt(double x, double y) {

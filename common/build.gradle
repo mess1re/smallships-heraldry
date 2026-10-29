@@ -10,6 +10,7 @@ dependencies {
     // Compile against Small Ships classes from the shared sources without leaking the Fabric jar into Forge runtime.
     modCompileOnly "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_fabric_modrinth_version}"
     testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+    compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${rootProject.mixinextras_version}"))
 }
 
 tasks.named("test") {

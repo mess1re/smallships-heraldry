@@ -21,8 +21,8 @@ public final class HeraldryClientPackets {
         registered = true;
         NetworkManager.registerReceiver(NetworkManager.s2c(), HeraldryPackets.TABLE_DRAFT_SYNC, (buf, context) -> {
             BlockPos blockPos = buf.readBlockPos();
-            ShipPreviewType activeType = ShipPreviewType.byName(buf.readUtf(16));
-            ShipPreviewType draftType = ShipPreviewType.byName(buf.readUtf(16));
+            ShipPreviewType activeType = ShipPreviewType.byName(buf.readUtf(64));
+            ShipPreviewType draftType = ShipPreviewType.byName(buf.readUtf(64));
             boolean first = buf.readBoolean();
             boolean last = buf.readBoolean();
             byte[] encoded = buf.readByteArray(HeraldryPatternTransfer.MAX_COMPRESSED_BYTES);

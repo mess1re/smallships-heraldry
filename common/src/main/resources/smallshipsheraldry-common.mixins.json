@@ -9,6 +9,7 @@
     "ShipMixin"
   ],
   "client": [
+    "client.SailBannerModelMixin",
     "client.ShipRendererMixin"
   ],
   "injectors": {

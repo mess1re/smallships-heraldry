@@ -58,8 +58,7 @@ final class SailMeshRenderer {
                     .uv(vertex.originalU(), vertex.originalV())
                     .overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(packedLight)
-                    .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
-                    .endVertex();
+                    .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z()).endVertex();
         }
     }
 
@@ -100,8 +99,7 @@ final class SailMeshRenderer {
                 .uv(u, v)
                 .overlayCoords(OverlayTexture.NO_OVERLAY)
                 .uv2(packedLight)
-                .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z())
-                .endVertex();
+                .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z()).endVertex();
     }
 
     private static void emitHighlightLine(
@@ -190,8 +188,7 @@ final class SailMeshRenderer {
         PoseStack.Pose pose = poseStack.last();
         vertexConsumer.vertex(pose.pose(), x, y, z)
                 .color(red, green, blue, 230)
-                .normal(pose.normal(), lineDirection.x(), lineDirection.y(), lineDirection.z())
-                .endVertex();
+                .normal(pose.normal(), lineDirection.x(), lineDirection.y(), lineDirection.z()).endVertex();
     }
 
     private record GridCorners(

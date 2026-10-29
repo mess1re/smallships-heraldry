@@ -1,9 +1,7 @@
 package me.mss1r.smallshipsheraldry.client.render;
 
-import com.talhanation.smallships.world.entity.ship.BriggEntity;
-import com.talhanation.smallships.world.entity.ship.CogEntity;
-import com.talhanation.smallships.world.entity.ship.DrakkarEntity;
-import com.talhanation.smallships.world.entity.ship.GalleyEntity;
+import com.talhanation.smallships.api.ShipRegistry;
+import com.talhanation.smallships.api.ShipType;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import me.mss1r.smallshipsheraldry.access.SailBannerAccess;
 import me.mss1r.smallshipsheraldry.common.HeraldryColorUtil;
@@ -12,6 +10,7 @@ import me.mss1r.smallshipsheraldry.common.ShipPreviewType;
 import me.mss1r.smallshipsheraldry.registry.HeraldryItems;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
 public final class PreviewShipFactory {
@@ -28,40 +27,20 @@ public final class PreviewShipFactory {
             return null;
         }
 
-        Ship ship = switch (previewType) {
-            // Each helper deliberately returns Ship. Architectury Transformer 5
-            // otherwise loads the concrete Small Ships classes to merge stack
-            // frames before the loader has applied Small Ships' access widener.
-            case COG -> createCog(level);
-            case BRIGG -> createBrigg(level);
-            case GALLEY -> createGalley(level);
-            case DRAKKAR -> createDrakkar(level);
-        };
+        ShipType registeredType = ShipRegistry.get(previewType.registryId());
+        if (registeredType == null) {
+            return null;
+        }
+        Ship ship = registeredType.summon(level, 0.0D, 0.0D, 0.0D);
 
         setSailState(ship, sailState);
-        ship.setData(Ship.SAIL_COLOR, HeraldryColorUtil.nearestDyeName(data.baseColorArgb()));
         applyPattern(ship, data);
-        ship.setPos(0.0D, 0.0D, 0.0D);
-        ship.setYRot(180.0F);
-        ship.yRotO = ship.getYRot();
-        ship.tickCount = 1;
+        Entity entity = ship;
+        entity.setPos(0.0D, 0.0D, 0.0D);
+        entity.setYRot(180.0F);
+        entity.yRotO = entity.getYRot();
+        entity.tickCount = 1;
         return ship;
-    }
-
-    private static Ship createCog(ClientLevel level) {
-        return CogEntity.summon(level, 0.0D, 0.0D, 0.0D);
-    }
-
-    private static Ship createBrigg(ClientLevel level) {
-        return BriggEntity.summon(level, 0.0D, 0.0D, 0.0D);
-    }
-
-    private static Ship createGalley(ClientLevel level) {
-        return GalleyEntity.summon(level, 0.0D, 0.0D, 0.0D);
-    }
-
-    private static Ship createDrakkar(ClientLevel level) {
-        return DrakkarEntity.summon(level, 0.0D, 0.0D, 0.0D);
     }
 
     public static void applyPattern(Ship ship, HeraldryPatternData data) {

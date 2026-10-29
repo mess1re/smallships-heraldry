@@ -17,6 +17,8 @@ configurations {
 
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    // Loom 1.2 otherwise supplies Mixin 0.8.5, which is too old for this loader.
+    runtimeOnly "net.fabricmc:sponge-mixin:${rootProject.fabric_mixin_version}"
     modApi "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
     modApi "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
 
@@ -26,6 +28,10 @@ dependencies {
     modImplementation "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_fabric_modrinth_version}"
     // Small Ships uses this API but its Fabric metadata does not declare it.
     modRuntimeOnly "maven.modrinth:forge-config-api-port:${rootProject.forge_config_api_port_version}"
+    if (providers.gradleProperty("withShipAddons").orElse("false").get().toBoolean()) {
+        modRuntimeOnly "curse.maven:small-ships-addon-1733494:9212434"
+        modRuntimeOnly "curse.maven:small-ships-viking-addon-1733216:9211481"
+    }
 }
 
 processResources {
@@ -35,7 +41,8 @@ processResources {
             mod_name: rootProject.mod_name,
             mod_author: rootProject.mod_author,
             mod_license: rootProject.mod_license,
-            mod_description: rootProject.mod_description
+            mod_description: rootProject.mod_description,
+            smallships_min_version: rootProject.smallships_min_version
     ]
     inputs.properties replaceProperties
 

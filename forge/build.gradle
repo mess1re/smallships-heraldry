@@ -29,6 +29,11 @@ dependencies {
     shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive false }
 
     modImplementation "maven.modrinth:${rootProject.smallships_modrinth_artifact}:${rootProject.smallships_forge_modrinth_version}"
+    include(implementation("io.github.llamalad7:mixinextras-forge:${rootProject.mixinextras_version}"))
+    if (providers.gradleProperty("withShipAddons").orElse("false").get().toBoolean()) {
+        modRuntimeOnly "curse.maven:small-ships-addon-1733494:9212485"
+        modRuntimeOnly "curse.maven:small-ships-viking-addon-1733216:9211538"
+    }
 }
 
 processResources {

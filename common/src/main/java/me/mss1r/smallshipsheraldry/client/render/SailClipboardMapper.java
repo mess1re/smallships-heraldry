@@ -42,6 +42,11 @@ final class SailClipboardMapper {
         return interpolate(face.vertices(), u, v);
     }
 
+    static PaintableSailMesh.ScreenPixel projectPixel(PaintableSailMesh.Face face, PaintableSailMesh.Hit hit) {
+        Vector3f point = position(face, hit.pixelX() - hit.slotX(), hit.pixelY() - hit.slotY());
+        return new PaintableSailMesh.ScreenPixel(hit, point.x(), point.y());
+    }
+
     static Map<Integer, Integer> map(
             List<PaintableSailMesh.Face> faces,
             PaintableSailMesh.SurfacePoint target,

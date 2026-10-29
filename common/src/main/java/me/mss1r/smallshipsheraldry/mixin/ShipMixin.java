@@ -7,6 +7,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -25,19 +26,34 @@ public abstract class ShipMixin implements SailBannerAccess {
     private String smallshipsheraldry$originalSailColor = "";
 
     @Unique
+    private boolean smallshipsheraldry$applyingPatternColor;
+
+    @Unique
     private static final EntityDataAccessor<ItemStack> SMALLSHIPSHERALDRY$SAIL_BANNER =
             SynchedEntityData.defineId(Ship.class, EntityDataSerializers.ITEM_STACK);
 
     @Inject(method = "defineSynchedData", at = @At("RETURN"))
     private void smallshipsheraldry$defineSynchedData(CallbackInfo ci) {
-        ((Ship) (Object) this).getEntityData().define(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
+        ((Entity) (Object) this).getEntityData().define(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
+    }
+
+    @Inject(method = "setData", at = @At("HEAD"))
+    private <T> void smallshipsheraldry$trackSailRecolor(EntityDataAccessor<T> accessor, T value, CallbackInfo ci) {
+        if (accessor == Ship.SAIL_COLOR && !smallshipsheraldry$applyingPatternColor
+                && !((Entity) (Object) this).level().isClientSide()
+                && smallshipsheraldry$hasSailBanner() && value instanceof String color) {
+            smallshipsheraldry$originalSailColor = color;
+        }
     }
 
     @Inject(method = "readAdditionalSaveData", at = @At("RETURN"))
     private void smallshipsheraldry$readAdditionalSaveData(CompoundTag tag, CallbackInfo ci) {
         Ship ship = (Ship) (Object) this;
         if (tag.contains(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG, Tag.TAG_COMPOUND)) {
-            ship.setData(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.of(tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG)));
+            ship.setData(
+                    SMALLSHIPSHERALDRY$SAIL_BANNER,
+                    ItemStack.of(tag.getCompound(SMALLSHIPSHERALDRY$SAIL_BANNER_TAG))
+            );
             smallshipsheraldry$originalSailColor = tag.getString(SMALLSHIPSHERALDRY$ORIGINAL_SAIL_COLOR_TAG);
         } else {
             ship.setData(SMALLSHIPSHERALDRY$SAIL_BANNER, ItemStack.EMPTY);
@@ -75,5 +91,16 @@ public abstract class ShipMixin implements SailBannerAccess {
     @Override
     public void smallshipsheraldry$setOriginalSailColor(String color) {
         smallshipsheraldry$originalSailColor = color == null ? "" : color;
+    }
+
+    @Override
+    public void smallshipsheraldry$applyPatternSailColor(String color) {
+        boolean previous = smallshipsheraldry$applyingPatternColor;
+        smallshipsheraldry$applyingPatternColor = true;
+        try {
+            ((Ship) (Object) this).setData(Ship.SAIL_COLOR, color);
+        } finally {
+            smallshipsheraldry$applyingPatternColor = previous;
+        }
     }
 }

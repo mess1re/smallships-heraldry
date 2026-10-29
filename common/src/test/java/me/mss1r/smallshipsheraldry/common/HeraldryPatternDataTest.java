@@ -8,10 +8,39 @@ import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeraldryPatternDataTest {
+    @Test
+    void itemNbtRoundTripsWithoutDiscardingOtherModsData() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.minecraft.server.Bootstrap.bootStrap();
+        var stack = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PAPER);
+        stack.getOrCreateTag().putString("OtherModData", "kept");
+        int[] pixels = new int[HeraldryPatternData.MESH_PIXEL_COUNT];
+        pixels[42] = 0xFF3366AA;
+        var pattern = HeraldryPatternData.fromMeshPixels("Painter", ShipPreviewType.DRAKKAR, 0xFFCC8844, pixels);
+        pattern.writeToStack(stack);
+
+        var decoded = HeraldryPatternData.tryFromStack(stack).orElseThrow();
+        assertEquals(pattern.author(), decoded.author());
+        assertEquals(pattern.shipType(), decoded.shipType());
+        assertEquals(pattern.baseColorArgb(), decoded.baseColorArgb());
+        assertArrayEquals(pixels, decoded.toDenseMeshPixels());
+        assertEquals("kept", stack.getTag().getString("OtherModData"));
+    }
+
+    @Test
+    void renderCacheHashTracksShipColourAndPixelsButNotTheAuthor() {
+        HeraldryPatternData pattern = HeraldryPatternData.fromMeshPixels("first", ShipPreviewType.COG, 0xFFFFFFFF, new int[]{0xFF112233});
+        assertEquals(pattern.visualHash(), pattern.withAuthor("second").visualHash());
+        assertNotEquals(pattern.visualHash(), pattern.withShipType(ShipPreviewType.BRIGG).visualHash());
+        assertNotEquals(pattern.visualHash(), pattern.withBaseColor(0xFF445566).visualHash());
+        assertNotEquals(pattern.visualHash(), HeraldryPatternData.fromMeshPixels("first", ShipPreviewType.COG, 0xFFFFFFFF, new int[]{0xFF778899}).visualHash());
+    }
+
     @Test
     void blankPatternStaysSmall() {
         HeraldryPatternData blank = HeraldryPatternData.blank();
