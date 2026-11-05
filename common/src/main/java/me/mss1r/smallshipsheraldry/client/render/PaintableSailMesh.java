@@ -133,7 +133,7 @@ public final class PaintableSailMesh {
         }
 
         SailMeshRenderer.renderPainted(
-                definition.facesForState(currentSailState(ship)),
+                definition.paintFacesForState(currentSailState(ship)),
                 poseStack,
                 vertexConsumer,
                 packedLight,
@@ -148,7 +148,7 @@ public final class PaintableSailMesh {
             return;
         }
 
-        for (Face face : definition.facesForState(currentSailState(ship))) {
+        for (Face face : definition.baseFacesForState(currentSailState(ship))) {
             if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
                 continue;
             }
@@ -589,7 +589,7 @@ public final class PaintableSailMesh {
         float centerY = (top + bottom) * 0.5F + EDITOR_VERTICAL_OFFSET + panY;
         float scale = EDITOR_BASE_SCALE * zoom;
         poseStack.translate(centerX, centerY, 220.0D);
-        poseStack.scale(scale, scale, -scale);
+        PreviewShipLighting.scale(poseStack, scale);
         poseStack.translate(0.0F, 0.05F, 0.0F);
         poseStack.mulPose(new Quaternionf()
                 .rotateZ((float) Math.PI)
@@ -638,7 +638,15 @@ public final class PaintableSailMesh {
     public record ScreenPixel(Hit hit, double screenX, double screenY) {
     }
 
-    record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
+    record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV,
+                  Vector3f shadingNormal) {
+        Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
+            this(x, y, z, originalU, originalV, localU, localV, null);
+        }
+
+        Vector3f lightNormal(Vector3f fallback) {
+            return shadingNormal == null ? fallback : shadingNormal;
+        }
     }
 
     record Face(int faceIndex, int state, String elementId, Vertex[] vertices, Vector3f normal, AtlasSlot slot) {
