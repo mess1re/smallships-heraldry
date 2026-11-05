@@ -69,10 +69,11 @@ public final class PreviewShipRenderer {
         EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         try {
             guiGraphics.pose().translate(centerX, centerY, 180.0D);
-            guiGraphics.pose().scale(scale, scale, -scale);
+            PreviewShipLighting.scale(guiGraphics.pose(), scale);
             guiGraphics.pose().translate(0.0F, 0.05F, 0.0F);
             guiGraphics.pose().mulPose(orientation);
-            Lighting.setupForEntityInInventory();
+            guiGraphics.flush();
+            PreviewShipLighting.setup();
             dispatcher.setRenderShadow(false);
             PaintableSailMesh.setEditorEntitySailsSuppressed(true);
             SailBannerOverlayRenderer.setEditorDraftTexture(draftTexture);
