@@ -36,7 +36,7 @@ final class StreamingSailTexture<K> implements AutoCloseable {
             uploadedKey = key;
         }
 
-        RenderType renderType = RenderType.entityTranslucent(location);
+        RenderType renderType = RenderType.entityDecal(location);
         // Make the same buffer transition as a resident overlay, so the base sail is
         // drawn first. Otherwise translucent paint would blend with the background.
         // No vertices are written into this deferred buffer.

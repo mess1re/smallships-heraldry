@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.Set;
 
 final class SailMeshRenderer {
-    private static final float PAINT_NORMAL_PUSH = 0.003F;
-
     private SailMeshRenderer() {
     }
 
@@ -34,14 +32,13 @@ final class SailMeshRenderer {
             for (PaintableSailMesh.Vertex vertex : face.vertices()) {
                 float u = (slot.x() + vertex.localU() * slot.width()) / HeraldryPatternData.MESH_ATLAS_WIDTH;
                 float v = (slot.y() + vertex.localV() * slot.height()) / HeraldryPatternData.MESH_ATLAS_HEIGHT;
-                Vector3f normal = face.normal();
                 emitPaintVertex(
-                        face,
+                        vertex.lightNormal(face.normal()),
                         pose,
                         vertexConsumer,
-                        vertex.x() + normal.x() * PAINT_NORMAL_PUSH,
-                        vertex.y() + normal.y() * PAINT_NORMAL_PUSH,
-                        vertex.z() + normal.z() * PAINT_NORMAL_PUSH,
+                        vertex.x(),
+                        vertex.y(),
+                        vertex.z(),
                         u,
                         v,
                         packedLight
@@ -84,7 +81,7 @@ final class SailMeshRenderer {
     }
 
     private static void emitPaintVertex(
-            PaintableSailMesh.Face face,
+            Vector3f normal,
             PoseStack.Pose pose,
             VertexConsumer vertexConsumer,
             float x,
@@ -99,7 +96,7 @@ final class SailMeshRenderer {
                 .uv(u, v)
                 .overlayCoords(OverlayTexture.NO_OVERLAY)
                 .uv2(packedLight)
-                .normal(pose.normal(), face.normal().x(), face.normal().y(), face.normal().z()).endVertex();
+                .normal(pose.normal(), normal.x(), normal.y(), normal.z()).endVertex();
     }
 
     private static void emitHighlightLine(

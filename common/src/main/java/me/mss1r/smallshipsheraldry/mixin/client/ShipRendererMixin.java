@@ -19,11 +19,10 @@ public abstract class ShipRendererMixin<T extends Ship> {
         if (PaintableSailMesh.editorEntitySailsSuppressed()) {
             SailBannerOverlayRenderer.renderEditorPreview(sailable, poseStack, multiBufferSource, packedLight);
             ci.cancel();
+            return;
         }
-    }
-
-    @Inject(method = "renderSail", at = @At("TAIL"))
-    private void smallshipsheraldry$renderHeraldryPaintLayer(Sailable sailable, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight, CallbackInfo ci) {
-        SailBannerOverlayRenderer.renderOverlay(sailable, poseStack, multiBufferSource, packedLight);
+        if (SailBannerOverlayRenderer.renderWorldSail(sailable, partialTicks, poseStack, multiBufferSource, packedLight)) {
+            ci.cancel();
+        }
     }
 }

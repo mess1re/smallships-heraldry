@@ -48,7 +48,7 @@ public final class SailBannerTextureCache {
 
         TextureKey cacheKey = new TextureKey(pattern.visualHash(), damageTexture);
         TEXTURE_CACHE.use(cacheKey, () -> createTexture(cacheKey, pattern),
-                texture -> draw.accept(buffers.getBuffer(RenderType.entityTranslucent(texture))),
+                texture -> draw.accept(buffers.getBuffer(RenderType.entityDecal(texture))),
                 () -> {
                     try {
                         OVERFLOW.render(cacheKey, image -> paintTexture(image, cacheKey, pattern), buffers, draw);

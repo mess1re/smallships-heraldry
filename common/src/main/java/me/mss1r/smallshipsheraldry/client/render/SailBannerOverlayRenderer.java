@@ -31,29 +31,35 @@ public final class SailBannerOverlayRenderer {
         EDITOR_DRAFT_TEXTURE.remove();
     }
 
-    public static void renderOverlay(Sailable sailable, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+    public static boolean renderWorldSail(Sailable sailable, float partialTicks, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
         Ship ship = sailable.self();
         SailDamage.State damageState = SailDamage.getState(ship);
         if (damageState == SailDamage.State.DESTROYED) {
-            return;
+            return false;
         }
 
         ItemStack sailBanner = ((SailBannerAccess) ship).smallshipsheraldry$getSailBanner();
         if (sailBanner.isEmpty()) {
-            return;
+            return false;
         }
         HeraldryPatternData patternData = SailBannerTextureCache.getPatternData(sailBanner);
         if (patternData == null || !patternData.shipType().matches(ship)) {
-            return;
+            return false;
         }
-        if (SailModelBridge.model(ship) == null) {
-            return;
-        }
+        SailModel model = SailModelBridge.model(ship);
+        if (model == null) return false;
+        SailModelBridge.setupAnim(model, ship, partialTicks);
 
         ResourceLocation damageTexture = damageState == SailDamage.State.TORN
                 ? SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).damagedLocation : null;
+        ResourceLocation baseTexture = damageTexture != null ? damageTexture
+                : SailModel.getSailColor(ship.getData(Ship.SAIL_COLOR)).location;
+        // Both passes must emit identical positions for the decal depth test.
+        PaintableSailMesh.renderOriginal(ship, poseStack,
+                bufferSource.getBuffer(RenderType.entityCutoutNoCull(baseTexture)), packedLight, java.util.Set.of());
         SailBannerTextureCache.render(patternData, damageTexture, bufferSource,
                 consumer -> PaintableSailMesh.render(ship, poseStack, consumer, packedLight, PaintableSailMesh.editorHiddenElements()));
+        return true;
     }
 
     public static void renderEditorPreview(Sailable sailable, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
@@ -78,7 +84,7 @@ public final class SailBannerOverlayRenderer {
             }
         }
         if (overlayTexture != null) {
-            VertexConsumer overlayConsumer = bufferSource.getBuffer(RenderType.entityTranslucent(overlayTexture));
+            VertexConsumer overlayConsumer = bufferSource.getBuffer(RenderType.entityDecal(overlayTexture));
             PaintableSailMesh.render(ship, poseStack, overlayConsumer, packedLight, PaintableSailMesh.editorHiddenElements());
         }
 
