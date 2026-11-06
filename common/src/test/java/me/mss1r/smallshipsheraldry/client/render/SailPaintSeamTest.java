@@ -3,6 +3,7 @@ package me.mss1r.smallshipsheraldry.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import org.joml.Matrix4f;
+import org.joml.Matrix3f;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
 
@@ -43,11 +44,31 @@ class SailPaintSeamTest {
     }
 
     private static VertexConsumer capture(List<Vector3f> vertices) {
+        return capture(vertices, new ArrayList<>());
+    }
+
+    @Test
+    void paintingKeepsTheNativeFlatNormalsInsteadOfRoundingEveryCube() {
+        var faces = foldedFaces();
+        var normals = new ArrayList<Vector3f>();
+        SailMeshRenderer.renderPainted(faces, new PoseStack(), capture(new ArrayList<>(), normals), 0, Set.of());
+        assertEquals(8, normals.size());
+        for (int face = 0; face < faces.size(); face++) for (int vertex = 0; vertex < 4; vertex++) {
+            assertEquals(faces.get(face).normal(), normals.get(face * 4 + vertex));
+        }
+    }
+
+    private static VertexConsumer capture(List<Vector3f> vertices, List<Vector3f> normals) {
         return (VertexConsumer) Proxy.newProxyInstance(VertexConsumer.class.getClassLoader(),
                 new Class<?>[] {VertexConsumer.class}, (proxy, method, args) -> {
                     if (args != null && args.length == 4 && args[0] instanceof Matrix4f
                             && (method.getName().equals("vertex") || method.getName().equals("addVertex"))) {
                         vertices.add(new Vector3f((float) args[1], (float) args[2], (float) args[3]));
+                    }
+                    if (args != null && args.length == 4
+                            && (args[0] instanceof PoseStack.Pose || args[0] instanceof Matrix3f)
+                            && (method.getName().equals("normal") || method.getName().equals("setNormal"))) {
+                        normals.add(new Vector3f((float) args[1], (float) args[2], (float) args[3]));
                     }
                     return method.getReturnType() == VertexConsumer.class ? proxy : null;
                 });

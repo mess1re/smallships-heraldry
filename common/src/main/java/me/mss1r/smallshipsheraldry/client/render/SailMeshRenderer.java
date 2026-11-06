@@ -33,7 +33,7 @@ final class SailMeshRenderer {
                 float u = (slot.x() + vertex.localU() * slot.width()) / HeraldryPatternData.MESH_ATLAS_WIDTH;
                 float v = (slot.y() + vertex.localV() * slot.height()) / HeraldryPatternData.MESH_ATLAS_HEIGHT;
                 emitPaintVertex(
-                        vertex.lightNormal(face.normal()),
+                        face.normal(),
                         pose,
                         vertexConsumer,
                         vertex.x(),

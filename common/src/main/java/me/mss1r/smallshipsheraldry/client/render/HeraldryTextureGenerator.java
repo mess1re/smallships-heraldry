@@ -11,7 +11,7 @@ public final class HeraldryTextureGenerator {
     private HeraldryTextureGenerator() {
     }
 
-    public static NativeImage buildComposedTexture(HeraldryPatternData data) {
+    public static NativeImage buildPaintTexture(HeraldryPatternData data) {
         NativeImage image = new NativeImage(ATLAS_WIDTH, ATLAS_HEIGHT, true);
         paintInto(image, data);
         return image;

@@ -306,7 +306,7 @@ final class HeraldryLibraryPanel implements AutoCloseable {
         previewTexture.uploadIfDirty();
         RenderSystem.enableDepthTest();
         PreviewShipRenderer.render(graphics, previewX, previewY, previewX + PREVIEW_WIDTH, previewY + PREVIEW_HEIGHT,
-                previewShip, previewYaw, previewPitch, previewZoom, previewPanX, previewPanY, Set.of(), previewTexture.textureLocation());
+                previewShip, previewYaw, previewPitch, previewZoom, previewPanX, previewPanY, Set.of(), previewTexture);
         graphics.flush();
         RenderSystem.disableDepthTest();
         Component details = Component.translatable("smallshipsheraldry.library.details",

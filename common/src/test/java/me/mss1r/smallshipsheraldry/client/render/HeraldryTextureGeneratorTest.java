@@ -14,7 +14,7 @@ class HeraldryTextureGeneratorTest {
         int[] pixels = new int[HeraldryPatternData.MESH_PIXEL_COUNT];
         Arrays.fill(pixels, 0xFFCC1122);
         var first = HeraldryPatternData.fromMeshPixels("", ShipPreviewType.COG, 0xFFFFFFFF, pixels);
-        try (var image = HeraldryTextureGenerator.buildComposedTexture(first)) {
+        try (var image = HeraldryTextureGenerator.buildPaintTexture(first)) {
             Arrays.fill(pixels, 0);
             pixels[1281] = 0x80123456;
             pixels[pixels.length - 1] = 0xFF102030;

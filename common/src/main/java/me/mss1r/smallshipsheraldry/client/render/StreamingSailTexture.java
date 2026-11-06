@@ -12,6 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /** A single overflow texture, never referenced by deferred entity buffers. */
 final class StreamingSailTexture<K> implements AutoCloseable {
@@ -21,7 +22,8 @@ final class StreamingSailTexture<K> implements AutoCloseable {
     private MultiBufferSource.BufferSource buffers;
     private K uploadedKey;
 
-    void render(K key, ImageWriter paint, MultiBufferSource entityBuffers, Consumer<VertexConsumer> draw) throws IOException {
+    void render(K key, ImageWriter paint, MultiBufferSource entityBuffers,
+                Function<ResourceLocation, RenderType> material, Consumer<VertexConsumer> draw) throws IOException {
         if (texture == null) {
             texture = new DynamicTexture(HeraldryTextureGenerator.ATLAS_WIDTH, HeraldryTextureGenerator.ATLAS_HEIGHT, true);
             location = ResourceLocation.fromNamespaceAndPath(SmallShipsHeraldry.MOD_ID, "dynamic/sails/overflow");
@@ -36,9 +38,8 @@ final class StreamingSailTexture<K> implements AutoCloseable {
             uploadedKey = key;
         }
 
-        RenderType renderType = RenderType.entityDecal(location);
-        // Make the same buffer transition as a resident overlay, so the base sail is
-        // drawn first. Otherwise translucent paint would blend with the background.
+        RenderType renderType = material.apply(location);
+        // Flush preceding entity geometry before the immediate overflow draw.
         // No vertices are written into this deferred buffer.
         entityBuffers.getBuffer(renderType);
 

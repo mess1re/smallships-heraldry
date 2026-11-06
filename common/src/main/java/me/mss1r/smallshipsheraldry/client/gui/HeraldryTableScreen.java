@@ -848,7 +848,7 @@ public class HeraldryTableScreen extends AbstractContainerScreen<HeraldryTableMe
                     previewPanX(),
                     previewPanY(),
                     parts.hidden(),
-                    draftTexture == null ? null : draftTexture.textureLocation()
+                    draftTexture
             );
         } finally {
             PaintableSailMesh.clearEditorHiddenElements();
