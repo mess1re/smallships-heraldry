@@ -10,7 +10,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.client.resources.metadata.texture.TextureMetadataSection;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
@@ -20,6 +19,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public final class SailBannerTextureCache {
     // Reserve one atlas for immediate overflow draws. Each GPU atlas also has a native copy.
@@ -30,28 +30,31 @@ public final class SailBannerTextureCache {
     private static final TextureResidencyCache<TextureKey, ResourceLocation> TEXTURE_CACHE =
             new TextureResidencyCache<>(MAX_RESIDENT_TEXTURES, 2, SailBannerTextureCache::release);
     private static final StreamingSailTexture<TextureKey> OVERFLOW = new StreamingSailTexture<>();
-    private static ResourceLocation damageLocation;
-    private static NativeImage damageImage;
-    private static boolean damageClamp;
     private static boolean warnedStreamingFailure;
     private static ClientLevel cachedLevel;
 
     private SailBannerTextureCache() {
     }
 
-    public static void render(HeraldryPatternData pattern, ResourceLocation damageTexture,
-                              MultiBufferSource buffers, Consumer<VertexConsumer> draw) {
+    public static boolean render(HeraldryPatternData pattern, ResourceLocation baseTexture,
+                              MultiBufferSource buffers, Function<ResourceLocation, RenderType> material,
+                              Consumer<VertexConsumer> draw) {
         clearForLevelChange();
         if (pattern == null || pattern.paintedPixelCount() == 0) {
-            return;
+            return false;
         }
 
-        TextureKey cacheKey = new TextureKey(pattern.visualHash(), damageTexture);
+        TextureKey cacheKey = new TextureKey(pattern.visualHash(), baseTexture);
+        boolean[] rendered = {false};
+        Consumer<VertexConsumer> trackedDraw = consumer -> {
+            draw.accept(consumer);
+            rendered[0] = true;
+        };
         TEXTURE_CACHE.use(cacheKey, () -> createTexture(cacheKey, pattern),
-                texture -> draw.accept(buffers.getBuffer(RenderType.entityDecal(texture))),
+                texture -> trackedDraw.accept(buffers.getBuffer(material.apply(texture))),
                 () -> {
                     try {
-                        OVERFLOW.render(cacheKey, image -> paintTexture(image, cacheKey, pattern), buffers, draw);
+                        OVERFLOW.render(cacheKey, image -> paintTexture(image, cacheKey, pattern), buffers, material, trackedDraw);
                     } catch (IOException | RuntimeException exception) {
                         if (!warnedStreamingFailure) {
                             warnedStreamingFailure = true;
@@ -59,6 +62,7 @@ public final class SailBannerTextureCache {
                         }
                     }
                 });
+        return rendered[0];
     }
 
     public static HeraldryPatternData getPatternData(ItemStack sailPattern) {
@@ -92,7 +96,7 @@ public final class SailBannerTextureCache {
     public static void clear() {
         TEXTURE_CACHE.clear();
         OVERFLOW.close();
-        clearDamageImage();
+        SailTextureSources.clear();
         warnedStreamingFailure = false;
         STACK_PATTERN_CACHE.clear();
         cachedLevel = null;
@@ -136,25 +140,9 @@ public final class SailBannerTextureCache {
 
     private static void paintTexture(NativeImage image, TextureKey key, HeraldryPatternData pattern) throws IOException {
         HeraldryTextureGenerator.paintInto(image, pattern);
-        if (key.damageTexture() == null) return;
-        if (!key.damageTexture().equals(damageLocation)) {
-            clearDamageImage();
-            var resource = Minecraft.getInstance().getResourceManager().getResourceOrThrow(key.damageTexture());
-            boolean clamp = resource.metadata().getSection(TextureMetadataSection.SERIALIZER)
-                    .map(TextureMetadataSection::isClamp).orElse(false);
-            try (var input = resource.open()) {
-                damageImage = NativeImage.read(input);
-            }
-            damageLocation = key.damageTexture();
-            damageClamp = clamp;
-        }
-        SailDamageMask.apply(image, damageImage, pattern.shipType(), damageClamp);
-    }
-
-    private static void clearDamageImage() {
-        if (damageImage != null) damageImage.close();
-        damageImage = null;
-        damageLocation = null;
+        var source = SailTextureSources.get(key.baseTexture());
+        SailTextureCompositor.compose(image, source.image(),
+                SailMeshDefinitionBuilder.definition(pattern.shipType()).facesByState().values(), source.clamp());
     }
 
     private static void release(ResourceLocation location) {
@@ -170,6 +158,6 @@ public final class SailBannerTextureCache {
     private record StackPattern(CompoundTag tag, HeraldryPatternData data) {
     }
 
-    private record TextureKey(long visualHash, ResourceLocation damageTexture) {
+    private record TextureKey(long visualHash, ResourceLocation baseTexture) {
     }
 }

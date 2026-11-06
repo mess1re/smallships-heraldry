@@ -5,7 +5,7 @@ import com.talhanation.smallships.client.renderer.entity.ShipRenderer;
 import com.talhanation.smallships.world.entity.ship.Ship;
 import com.talhanation.smallships.world.entity.ship.abilities.Sailable;
 import me.mss1r.smallshipsheraldry.client.render.PaintableSailMesh;
-import me.mss1r.smallshipsheraldry.client.render.SailBannerOverlayRenderer;
+import me.mss1r.smallshipsheraldry.client.render.SailPatternRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,11 +17,11 @@ public abstract class ShipRendererMixin<T extends Ship> {
     @Inject(method = "renderSail", at = @At("HEAD"), cancellable = true)
     private void smallshipsheraldry$suppressEditorSails(Sailable sailable, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight, CallbackInfo ci) {
         if (PaintableSailMesh.editorEntitySailsSuppressed()) {
-            SailBannerOverlayRenderer.renderEditorPreview(sailable, poseStack, multiBufferSource, packedLight);
+            SailPatternRenderer.renderEditorPreview(sailable, poseStack, multiBufferSource, packedLight);
             ci.cancel();
             return;
         }
-        if (SailBannerOverlayRenderer.renderWorldSail(sailable, partialTicks, poseStack, multiBufferSource, packedLight)) {
+        if (SailPatternRenderer.renderWorldSail(sailable, partialTicks, poseStack, multiBufferSource, packedLight)) {
             ci.cancel();
         }
     }

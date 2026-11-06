@@ -89,7 +89,6 @@ final class SailMeshDefinitionBuilder {
 
         Map<String, PaintableSailMesh.AtlasSlot> faceSlots = packAtlasSlots(faceTiles, shipType);
         Map<Integer, List<PaintableSailMesh.Face>> facesByState = new HashMap<>();
-        Map<Integer, List<PaintableSailMesh.Face>> paintFacesByState = new HashMap<>();
         Map<Integer, List<PaintableSailMesh.Face>> baseFacesByState = new HashMap<>();
         for (int state = 0; state < HeraldryPatternData.STAGE_COUNT; state++) {
             List<PaintableSailMesh.Face> stateFaces = new ArrayList<>();
@@ -103,7 +102,6 @@ final class SailMeshDefinitionBuilder {
                 }
             }
             facesByState.put(state, List.copyOf(stateFaces));
-            paintFacesByState.put(state, SailPaintShading.build(stateFaces));
             baseFacesByState.put(state, List.copyOf(baseFaces));
         }
 
@@ -112,7 +110,7 @@ final class SailMeshDefinitionBuilder {
             immutableElementsByState.put(entry.getKey(), List.copyOf(entry.getValue().values()));
         }
         return new Definition(faceSlots, Map.copyOf(immutableElementsByState),
-                Map.copyOf(facesByState), Map.copyOf(paintFacesByState), Map.copyOf(baseFacesByState));
+                Map.copyOf(facesByState), Map.copyOf(baseFacesByState));
     }
 
     private static Map<String, PaintableSailMesh.AtlasSlot> packAtlasSlots(
@@ -445,11 +443,10 @@ final class SailMeshDefinitionBuilder {
             Map<String, PaintableSailMesh.AtlasSlot> faceSlotsByKey,
             Map<Integer, List<PaintableSailMesh.Element>> elementsByState,
             Map<Integer, List<PaintableSailMesh.Face>> facesByState,
-            Map<Integer, List<PaintableSailMesh.Face>> paintFacesByState,
             Map<Integer, List<PaintableSailMesh.Face>> baseFacesByState
     ) {
         private static Definition empty() {
-            return new Definition(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            return new Definition(Map.of(), Map.of(), Map.of(), Map.of());
         }
 
         boolean isEmpty() {
@@ -466,10 +463,6 @@ final class SailMeshDefinitionBuilder {
 
         List<PaintableSailMesh.Face> facesForState(int state) {
             return facesByState.getOrDefault(Mth.clamp(state, 0, HeraldryPatternData.STAGE_COUNT - 1), List.of());
-        }
-
-        List<PaintableSailMesh.Face> paintFacesForState(int state) {
-            return paintFacesByState.getOrDefault(Mth.clamp(state, 0, HeraldryPatternData.STAGE_COUNT - 1), List.of());
         }
 
         List<PaintableSailMesh.Face> baseFacesForState(int state) {

@@ -133,7 +133,7 @@ public final class PaintableSailMesh {
         }
 
         SailMeshRenderer.renderPainted(
-                definition.paintFacesForState(currentSailState(ship)),
+                definition.facesForState(currentSailState(ship)),
                 poseStack,
                 vertexConsumer,
                 packedLight,
@@ -142,6 +142,14 @@ public final class PaintableSailMesh {
     }
 
     public static void renderOriginal(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
+        renderOriginal(ship, poseStack, vertexConsumer, packedLight, hiddenElements, false);
+    }
+
+    static void renderUnpaintable(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements) {
+        renderOriginal(ship, poseStack, vertexConsumer, packedLight, hiddenElements, true);
+    }
+
+    private static void renderOriginal(Ship ship, PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, Set<String> hiddenElements, boolean unpaintableOnly) {
         ShipPreviewType shipType = ShipPreviewType.fromShip(ship);
         SailMeshDefinitionBuilder.Definition definition = definition(shipType);
         if (definition.isEmpty()) {
@@ -149,6 +157,7 @@ public final class PaintableSailMesh {
         }
 
         for (Face face : definition.baseFacesForState(currentSailState(ship))) {
+            if (unpaintableOnly && face.slot().index() >= 0) continue;
             if (hiddenElements != null && hiddenElements.contains(face.elementId())) {
                 continue;
             }
@@ -638,15 +647,7 @@ public final class PaintableSailMesh {
     public record ScreenPixel(Hit hit, double screenX, double screenY) {
     }
 
-    record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV,
-                  Vector3f shadingNormal) {
-        Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
-            this(x, y, z, originalU, originalV, localU, localV, null);
-        }
-
-        Vector3f lightNormal(Vector3f fallback) {
-            return shadingNormal == null ? fallback : shadingNormal;
-        }
+    record Vertex(float x, float y, float z, float originalU, float originalV, float localU, float localV) {
     }
 
     record Face(int faceIndex, int state, String elementId, Vertex[] vertices, Vector3f normal, AtlasSlot slot) {

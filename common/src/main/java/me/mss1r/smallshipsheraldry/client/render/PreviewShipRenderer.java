@@ -9,7 +9,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Quaternionf;
 
@@ -50,7 +49,7 @@ public final class PreviewShipRenderer {
         render(guiGraphics, left, top, right, bottom, ship, yawDegrees, pitchDegrees, zoom, panX, panY, hiddenElements, null);
     }
 
-    public static void render(GuiGraphics guiGraphics, int left, int top, int right, int bottom, Ship ship, float yawDegrees, float pitchDegrees, float zoom, float panX, float panY, Set<String> hiddenElements, ResourceLocation draftTexture) {
+    public static void render(GuiGraphics guiGraphics, int left, int top, int right, int bottom, Ship ship, float yawDegrees, float pitchDegrees, float zoom, float panX, float panY, Set<String> hiddenElements, HeraldryDraftTexture draftTexture) {
         if (ship == null) {
             return;
         }
@@ -76,7 +75,7 @@ public final class PreviewShipRenderer {
             PreviewShipLighting.setup();
             dispatcher.setRenderShadow(false);
             PaintableSailMesh.setEditorEntitySailsSuppressed(true);
-            SailBannerOverlayRenderer.setEditorDraftTexture(draftTexture);
+            SailPatternRenderer.setEditorDraftTexture(draftTexture);
             dispatcher.render(
                     ship,
                     0.0D,
@@ -91,7 +90,7 @@ public final class PreviewShipRenderer {
             guiGraphics.flush();
         } finally {
             PaintableSailMesh.clearEditorGuiScale();
-            SailBannerOverlayRenderer.clearEditorDraftTexture();
+            SailPatternRenderer.clearEditorDraftTexture();
             PaintableSailMesh.clearEditorEntitySailsSuppressed();
             dispatcher.setRenderShadow(true);
             guiGraphics.pose().popPose();
